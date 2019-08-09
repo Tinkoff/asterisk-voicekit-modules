@@ -1,0 +1,14 @@
+Instructions
+============
+
+```
+./configure --prefix=PREFIX
+make
+make install-strip
+```
+
+
+Dependencies
+============
+
+GRPC from https://github.com/grpc/grpc

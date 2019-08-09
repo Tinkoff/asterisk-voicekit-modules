@@ -1,0 +1,67 @@
+[general]
+
+;Speech-To-Text host:port
+endpoint=domain.org:443
+
+;Use SSL. Default: no
+use_ssl=true
+
+;Use external CA file (relative to configuration directory). Default: built-in CA
+ca_file=grpcstt_ca.pem
+
+;Language code
+language_code=
+
+;Frame format: "alaw", "ulaw" or "slin". Default: "alaw"
+frame_format=alaw
+
+;Maximum number of alternatives. Default: 1
+max_alternatives=3
+
+
+[vad]
+
+;Disable VAD (at Speech-To-Text server). Default: no
+disable=false
+
+;Minimal speech duration. Default: settings at Speech-To-Text server
+min_speech_duration=0.3
+
+;Maximal speech duration. Default: settings at Speech-To-Text server
+max_speech_duration=15.0
+
+;Silence duration threshold. Default: settings at Speech-To-Text server
+silence_duration_threshold=0.3
+
+;Silence probobality threshold. Default: settings at Speech-To-Text server
+silence_prob_threshold=0.9
+
+;Aggressiveness. Default: settings at Speech-To-Text server
+aggressiveness=1 ; float
+
+
+[interim_results]
+
+;Enable interim recognition results. Default: no
+enable=true
+
+;Interim results interval. Default: settings at Speech-To-Text server
+interval=3
+
+
+[authorization]
+
+;Set API key for authorization. Default: ""
+api_key=abcdefghijklmbhopABCDEFGhijlLMNOPQRSTUVWXYZ=TEST
+
+;Set secret key for authorization. Default: ""
+secret_key=abcdefghijklmbhopABCDEFGhijlLMNOPQRSTUVWXYZ3211123
+
+;Set issuer for authorization. Default: ""
+issuer=issuer
+
+;Set subject for authorization. Default: ""
+subject=subject
+
+;Set audience for authorization. Default: ""
+audience=tinkoff.cloud.stt

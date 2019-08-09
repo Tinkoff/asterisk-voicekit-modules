@@ -1,0 +1,5 @@
+#!/bin/sh -e
+
+(cd thirdparty && ./bootstrap)
+find app_* -maxdepth 0 -type d -exec sh -c 'cd {} && ./bootstrap' \;
+find func_* -maxdepth 0 -type d -exec sh -c 'cd {} && ./bootstrap' \;

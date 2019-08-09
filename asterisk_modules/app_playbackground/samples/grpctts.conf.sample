@@ -1,0 +1,46 @@
+[general]
+
+;Text-To-Speech host:port
+endpoint=domain.org:443
+
+;Use external CA file (relative to configuration directory). Default: built-in CA
+ca_file=grpctts_ca.pem
+
+;Speaking rate. Default: 1.0
+speaking_rate=2.0
+
+;Pitch (currently unused). Default: 0.0
+pitch=0.0
+
+;Volume gain in decibels (currently unused). Default: 0.0
+volume_gain_db=0.3
+
+;Voice language code. Default: ""
+voice_language_code=
+
+;Voice name. Default: ""
+voice_name=johnny
+
+;Voice gender. Allowed values are "male", "female", "neutral" and "unspecified" ("" is for "unspecified"). Default: "unspecified"
+voice_gender=male
+
+;Remote audio format. Allowed values are "slin" and "opus". Default: "slin"
+remote_frame_format=opus
+
+
+[authorization]
+
+;Set API key for authorization. Default: ""
+api_key=abcdefghijklmbhopABCDEFGhijlLMNOPQRSTUVWXYZ=TEST
+
+;Set secret key for authorization. Default: ""
+secret_key=abcdefghijklmbhopABCDEFGhijlLMNOPQRSTUVWXYZ3211123
+
+;Set issuer for authorization. Default: ""
+issuer=issuer
+
+;Set subject for authorization. Default: ""
+subject=subject
+
+;Set audience for authorization. Default: ""
+audience=tinkoff.cloud.tts

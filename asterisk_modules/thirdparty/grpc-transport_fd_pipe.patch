@@ -1,0 +1,53 @@
+--- grpc/src/core/lib/channel/connected_channel.cc.orig	2019-02-01 16:28:09.046394700 +0300
++++ grpc/src/core/lib/channel/connected_channel.cc	2019-02-01 17:07:44.077750986 +0300
+@@ -23,6 +23,7 @@
+ #include <stdarg.h>
+ #include <stdio.h>
+ #include <string.h>
++#include <unistd.h>
+ 
+ #include <grpc/byte_buffer.h>
+ #include <grpc/slice_buffer.h>
+@@ -36,6 +37,7 @@
+ 
+ typedef struct connected_channel_channel_data {
+   grpc_transport* transport;
++  int socket_fd_pass_socket_fd;
+ } channel_data;
+ 
+ typedef struct {
+@@ -182,6 +184,8 @@
+   channel_data* cd = static_cast<channel_data*>(elem->channel_data);
+   GPR_ASSERT(args->is_last);
+   cd->transport = nullptr;
++  const grpc_arg* arg = grpc_channel_args_find(args->channel_args, "socket_fd_pass_socket_fd");
++  cd->socket_fd_pass_socket_fd = arg ? dup(*((int *) arg->value.pointer.p)) : -1;
+   return GRPC_ERROR_NONE;
+ }
+ 
+@@ -191,6 +195,9 @@
+   if (cd->transport) {
+     grpc_transport_destroy(cd->transport);
+   }
++  if (cd->socket_fd_pass_socket_fd != -1) {
++    close(cd->socket_fd_pass_socket_fd);
++  }
+ }
+ 
+ /* No-op. */
+@@ -217,6 +224,15 @@
+   GPR_ASSERT(elem->filter == &grpc_connected_filter);
+   GPR_ASSERT(cd->transport == nullptr);
+   cd->transport = static_cast<grpc_transport*>(t);
++  if (cd->socket_fd_pass_socket_fd != -1) {
++    grpc_endpoint* endpoint = grpc_transport_get_endpoint(static_cast<grpc_transport*>(t));
++    if (endpoint) {
++      int transport_fd = dup(grpc_endpoint_get_fd(endpoint));
++      write(cd->socket_fd_pass_socket_fd, &transport_fd, sizeof(int));
++    }
++    close(cd->socket_fd_pass_socket_fd);
++    cd->socket_fd_pass_socket_fd = -1;
++  }
+ 
+   /* HACK(ctiller): increase call stack size for the channel to make space
+      for channel data. We need a cleaner (but performant) way to do this,

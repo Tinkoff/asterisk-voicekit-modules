@@ -1,0 +1,42 @@
+// Basic TTS example with single main loop - recommended approach.
+// Recognize during a minute logging recognition events with level NOTICE.
+
+context incoming {
+	tts_event_driven => {
+		Answer();
+		WaitEventInit(); // Initialize event queue
+		PlayBackgroundInitGRPCTTS(); // Initialize synthesis
+
+		PlayBackground(say,,{"text":"пуговица пушкина"});
+
+		Set(CURRENT_PHRASE=1);
+		
+		Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 60]); // Set end time to a minute after now
+		Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Calculate maximum wait time
+		while (${SLEEP_TIME} > 0) { // While not timed out yet
+			WaitEvent(${SLEEP_TIME}); // Wait until next event or timeout
+			if (${WAITEVENTSTATUS} == SUCCESS) {
+				switch (${WAITEVENTNAME}) {
+				case PlayBackgroundFinished:
+					if (${CURRENT_PHRASE} == 1) {
+						PlayBackground(say,,{"text":"ложка горького"});
+						Set(CURRENT_PHRASE=2);
+						Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 80]);
+					} else if (${CURRENT_PHRASE} == 2) {
+						PlayBackground(say,,{"text":"толстовка толсто0ва"});
+						Set(CURRENT_PHRASE=3);
+						Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 40]);
+					} else if (${CURRENT_PHRASE} == 3) {
+						// To avoid distortion of last frames
+						Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 0.2]);
+					}
+					break;
+				default:
+				}
+			}
+			Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Update maximum wait time
+		}
+
+		Hangup();
+	}
+};

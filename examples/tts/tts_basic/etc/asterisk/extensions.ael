@@ -1,0 +1,60 @@
+// Basic TTS example.
+// Recognize during a minute logging recognition events with level NOTICE.
+
+context incoming {
+	tts_basic => {
+		Answer();
+		WaitEventInit(); // Initialize event queue
+		PlayBackgroundInitGRPCTTS(); // Initialize synthesis
+
+		PlayBackground(say,,{"text":"пуговица пушкина"});
+		
+		Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 60]); // Set end time to a minute after now
+		Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Calculate maximum wait time
+		while (${SLEEP_TIME} > 0) { // While not timed out yet
+			WaitEvent(${SLEEP_TIME}); // Wait until next event or timeout
+			if (${WAITEVENTSTATUS} == SUCCESS) {
+				switch (${WAITEVENTNAME}) {
+				case PlayBackgroundFinished:
+					Log(NOTICE,Finished layer #${WAITEVENTBODY});
+					Set(CALL_END_TIME=0);
+					break;
+				case PlayBackgroundError:
+					Set(ARRAY(LAYER,ERROR_MESSAGE)=${WAITEVENTBODY});
+					Log(NOTICE,Error at layer #${LAYER}: ${ERROR_MESSAGE});
+					Set(CALL_END_TIME=0);
+					break;
+				default:
+				}
+			}
+			Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Update maximum wait time
+		}
+		
+		PlayBackground(say,,{"text":"ложка горького"});
+
+		Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 60]); // Set end time to a minute after now
+		Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Calculate maximum wait time
+		while (${SLEEP_TIME} > 0) { // While not timed out yet
+			WaitEvent(${SLEEP_TIME}); // Wait until next event or timeout
+			if (${WAITEVENTSTATUS} == SUCCESS) {
+				switch (${WAITEVENTNAME}) {
+				case PlayBackgroundFinished:
+					Log(NOTICE,Finished layer #${WAITEVENTBODY});
+					Set(CALL_END_TIME=0);
+					break;
+				case PlayBackgroundError:
+					Set(ARRAY(LAYER,ERROR_MESSAGE)=${WAITEVENTBODY});
+					Log(NOTICE,Error at layer #${LAYER}: ${ERROR_MESSAGE});
+					Set(CALL_END_TIME=0);
+					break;
+				default:
+				}
+			}
+			Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Update maximum wait time
+		}
+
+		Wait(0.2);
+
+		Hangup();
+	}
+};

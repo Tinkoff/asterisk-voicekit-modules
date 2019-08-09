@@ -1,0 +1,51 @@
+// STT and TTS combined.
+// First asking for pet name.
+// Second saying an offer using received name.
+//
+// Since there's no simple way to access JSON out-of-the-box
+// you'll have to install module for that from https://github.com/drivefast/asterisk-res_json.git
+// If installing the module is problematic basically replace function call with dummy value.
+
+context incoming {
+	combined_stt_tts => {
+		Answer();
+		WaitEventInit();             // Initialize event queue
+		PlayBackgroundInitGRPCTTS(); // Initialize synthesis
+		GRPCSTTBackground();         // Initialize background recognition
+
+		PlayBackground(say,,{"text":"здравствуйте, назовите кличку вашего кота"});
+
+		Set(PHASE=WAIT_FOR_ALIAS);
+		
+		Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 60]); // Set end time to a minute after now
+		Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Calculate maximum wait time
+		while (${SLEEP_TIME} > 0) { // While not timed out yet
+			WaitEvent(${SLEEP_TIME}); // Wait until next event or timeout
+			if (${WAITEVENTSTATUS} == SUCCESS) {
+				switch (${WAITEVENTNAME}) {
+				case GRPCSTT_UTF8:
+					switch (${PHASE}) {
+					case WAIT_FOR_ALIAS:
+						Set(PET_ALIAS=${JSONELEMENT(WAITEVENTBODY,alternatives/0/transcript)});
+						Log(NOTICE,Pet alias is ${PET_ALIAS});
+						PlayBackground(say,,{"text":"У нас есть спецпредложение для вашего кота"});
+						PlayBackground(&say,,{"text":"${PET_ALIAS} получит курс виртуозного тайского массажа"});
+						Set(PHASE=OFFER);
+						Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 30]);
+						break;
+					case OFFER:
+						Set(PHASE=EXITING);
+						Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 0.2]);
+						break;
+					default:
+					}
+					break;
+				default:
+				}
+			}
+			Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Update maximum wait time
+		}
+
+		Hangup();
+	}
+};

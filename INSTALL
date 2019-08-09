@@ -1,0 +1,12 @@
+Instructions
+============
+
+First call bootstrap for whole repository:
+
+```
+cd asterisk_modules
+./bootstrap
+```
+
+
+Now to build each module see INSTALL files at corresponding directory.
