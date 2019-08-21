@@ -10,6 +10,10 @@ AC_PROG_CXX
 AC_PROG_LIBTOOL
 AC_LIBTOOL_SETUP
 
+AC_PATH_PROG(XXD, xxd)
+if test -z "$XXD"; then
+    AC_MSG_ERROR([Please install 'xxd' tool])
+fi
 
 asteriskmoduledir="$libdir/asterisk/modules"
 AC_SUBST(asteriskmoduledir)
