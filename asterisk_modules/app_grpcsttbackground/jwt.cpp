@@ -16,10 +16,14 @@
  * at the top of the source tree.
  */
 
+extern "C" struct ast_module *AST_MODULE_SELF_SYM(void);
+#define AST_MODULE_SELF_SYM AST_MODULE_SELF_SYM
+
 #define _GNU_SOURCE 1
 #include "jwt.h"
 
 #include <string>
+#include <string.h>
 #include <openssl/hmac.h>
 #include <openssl/sha.h>
 

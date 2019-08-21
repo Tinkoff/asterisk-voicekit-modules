@@ -16,6 +16,9 @@
  * at the top of the source tree.
  */
 
+extern struct ast_module *AST_MODULE_SELF_SYM(void);
+#define AST_MODULE_SELF_SYM AST_MODULE_SELF_SYM
+
 #define _GNU_SOURCE 1
 #include "grpctts_conf.h"
 
@@ -170,7 +173,7 @@ int grpctts_conf_load(struct grpctts_conf *conf, ast_mutex_t *mutex, const char 
 			struct ast_variable *var = ast_variable_browse(cfg, cat);
 			while (var) {
 				if (!strcasecmp(var->name, "endpoint")) {
-					free(conf->endpoint);
+					ast_free(conf->endpoint);
 					conf->endpoint = ast_strdup(var->value);
 				} else if (!strcasecmp(var->name, "use_ssl")) {
 					conf->ssl_grpc = ast_true(var->value);
@@ -237,19 +240,19 @@ int grpctts_conf_load(struct grpctts_conf *conf, ast_mutex_t *mutex, const char 
 			struct ast_variable *var = ast_variable_browse(cfg, cat);
 			while (var) {
 				if (!strcasecmp(var->name, "api_key")) {
-					free(conf->authorization_api_key);
+					ast_free(conf->authorization_api_key);
 					conf->authorization_api_key = ast_strdup(var->value);
 				} else if (!strcasecmp(var->name, "secret_key")) {
-					free(conf->authorization_secret_key);
+					ast_free(conf->authorization_secret_key);
 					conf->authorization_secret_key = ast_strdup(var->value);
 				} else if (!strcasecmp(var->name, "issuer")) {
-					free(conf->authorization_issuer);
+					ast_free(conf->authorization_issuer);
 					conf->authorization_issuer = ast_strdup(var->value);
 				} else if (!strcasecmp(var->name, "subject")) {
-					free(conf->authorization_subject);
+					ast_free(conf->authorization_subject);
 					conf->authorization_subject = ast_strdup(var->value);
 				} else if (!strcasecmp(var->name, "audience")) {
-					free(conf->authorization_audience);
+					ast_free(conf->authorization_audience);
 					conf->authorization_audience = ast_strdup(var->value);
 				} else {
 					ast_log(LOG_ERROR, "PlayBackground: parse error at '%s': category '%s: unknown keyword '%s' at line %d\n", fname, cat, var->name, var->lineno);

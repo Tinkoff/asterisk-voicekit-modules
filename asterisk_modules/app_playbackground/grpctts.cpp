@@ -16,6 +16,9 @@
  * at the top of the source tree.
  */
 
+extern "C" struct ast_module *AST_MODULE_SELF_SYM(void);
+#define AST_MODULE_SELF_SYM AST_MODULE_SELF_SYM
+
 #define typeof __typeof__
 #include "grpctts.h"
 

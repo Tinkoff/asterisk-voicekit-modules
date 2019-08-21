@@ -29,6 +29,9 @@
 	<support_level>extended</support_level>
  ***/
 
+extern struct ast_module *AST_MODULE_SELF_SYM(void);
+#define AST_MODULE_SELF_SYM AST_MODULE_SELF_SYM
+
 #include "grpc_stt.h"
 
 #include <grpc/grpc.h>
@@ -262,7 +265,7 @@ static void *thread_start(struct thread_conf *conf)
 		     conf->interim_results_enable, conf->interim_results_interval);
 
 	ast_channel_unref(chan);
-	free(conf);
+	ast_free(conf);
 	return NULL;
 }
 
@@ -450,7 +453,7 @@ static int grpcsttbackground_exec(struct ast_channel *chan, const char *data)
 	if (args.language_code && *args.language_code)
 		thread_conf.language_code = args.language_code;
 
-	RAII_VAR (char *, ca_data, NULL, free);
+	RAII_VAR (char *, ca_data, NULL, ast_free);
 	if (args.ca_file && *args.ca_file) {
 		if (!(ca_data = load_ca_from_file(args.ca_file)))
 			return -1;

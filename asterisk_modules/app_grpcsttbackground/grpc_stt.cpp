@@ -16,6 +16,9 @@
  * at the top of the source tree.
  */
 
+extern "C" struct ast_module *AST_MODULE_SELF_SYM(void);
+#define AST_MODULE_SELF_SYM AST_MODULE_SELF_SYM
+
 #define typeof __typeof__
 #include "stt.grpc.pb.h"
 #include "roots.pem.h"
@@ -35,6 +38,7 @@
 #include <grpcpp/create_channel.h>
 #include <grpcpp/security/credentials.h>
 extern "C" {
+#include <asterisk.h>
 #include <asterisk/autoconfig.h>
 #include <asterisk/compiler.h>
 #include <asterisk/time.h>

@@ -29,6 +29,9 @@
 	<support_level>extended</support_level>
  ***/
 
+extern struct ast_module *AST_MODULE_SELF_SYM(void);
+#define AST_MODULE_SELF_SYM AST_MODULE_SELF_SYM
+
 #include <asterisk.h>
 
 #include <asterisk/pbx.h>
