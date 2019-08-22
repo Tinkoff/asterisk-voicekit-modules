@@ -1,0 +1,14 @@
+Instructions
+============
+
+Execute 'ami-request.sh' script during call to Asterisk to generate AMI events:
+```
+sh ami-request.sh HOST PORT AMI_USER AMI_PASSWORD CHANNEL
+```
+
+e. g.
+```
+sh ami-request.sh 127.0.0.1 5038 admin password SIP/1234-00000000
+```
+
+Note that AMI access have to be configured properly at /etc/asterisk/manager.conf

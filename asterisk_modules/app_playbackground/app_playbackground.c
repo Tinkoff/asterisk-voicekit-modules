@@ -62,7 +62,7 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 		</synopsis>
 		<syntax>
 			<parameter name="conf_fname" required="false">
-				<para>Specifies custom configuration filename for current TTS session (used by &quot;PlayBackground(say:*)&quot;). By default&quot;grpctts.conf&quot; is used.</para>
+				<para>Specifies custom configuration filename for current TTS session (used by &quot;PlayBackground(say,[OPTIONS],JSON_TASK)&quot;). By default&quot;grpctts.conf&quot; is used.</para>
 			</parameter>
 			<parameter name="endpoint" required="false">
 				<para>Specifies endpointg for GRPC TTS service (must be specified here or at configuration file)</para>
@@ -75,7 +75,7 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 			</parameter>
 		</syntax>
 		<description>
-			<para>This application is necessary to allow &quot;PlayBackground&quot; application call for speech synthesis using &quot;say:*&quot; command.</para>
+			<para>This application is necessary to allow &quot;PlayBackground&quot; application call for speech synthesis using &quot;say,[OPTIONS],JSON_TASK&quot; command.</para>
 		</description>
 		<see-also>
 			<ref type="application">PlayBackground</ref>
@@ -122,8 +122,11 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 			 PlayBackgorund(3@&amp;sleep,,0.2);
 			 PlayBackgorund(3@&amp;play,,dir/next_file);
 			</example>
-			<example title="Say synthesized text">
+			<example title="Say synthesized text using UTF-8">
 			 PlayBackground(say,,{"text":"ложка горького"});
+			</example>
+			<example title="Say synthesized text using ASCII">
+			 PlayBackground(say,,{"text":"\u043b\u043e\u0436\u043a\u0430 \u0433\u043e\u0440\u044c\u043a\u043e\u0433\u043e"});
 			</example>
 		</description>
 		<see-also>

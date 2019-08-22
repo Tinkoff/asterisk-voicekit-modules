@@ -1,0 +1,64 @@
+// STT with playback example.
+// Recognize during a minute also handling playback requests.
+//
+// !!NOTE!!
+// Execute 'ami-request.sh' script during call (see README up above)
+
+context incoming {
+	stt_with_playback => {
+		Answer();
+		WaitEventInit(); // Initialize event queue
+		GRPCSTTBackground(); // Initialize background recognition
+		
+		Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 60]); // Set end time to a minute after now
+		Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Calculate maximum wait time
+		while (${SLEEP_TIME} > 0) { // While not timed out yet
+			WaitEvent(${SLEEP_TIME}); // Wait until next event or timeout
+			if (${WAITEVENTSTATUS} == SUCCESS) {
+				Set(CurrentUTCTime=${GET_TIME_NSEC(UTC)});
+				Set(CurrentUTCTimeString=${STRFTIME(${CurrentUTCTime},GMT,%FT%T)}.${CurrentUTCTime:-9:});
+				switch (${WAITEVENTNAME}) {
+				case GRPCSTT_X_REQUEST_ID:
+					Log(NOTICE,[${CurrentUTCTimeString}] x-request-id = ${WAITEVENTBODY});
+					break;
+				case GRPCSTT_ASCII:
+					Log(NOTICE,[${CurrentUTCTimeString}] Phrase(ASCII encoded) = ${WAITEVENTBODY});
+					break;
+				case GRPCSTT_UTF8:
+					Log(NOTICE,[${CurrentUTCTimeString}] Phrase(UTF-8 encoded) = ${WAITEVENTBODY});
+					break;
+				case GRPCSTT_SESSION_FINISHED:
+					// Something went wrong: recognition session closed
+					Set(ARRAY(STATUS,ERROR_CODE,ERROR_MESSAGE)=${WAITEVENTBODY});
+					if (${STATUS} == SUCCESS) {
+						// Can't actually happen
+						Log(NOTICE,Session finished successfully);
+					} else {
+						Log(NOTICE,Session finished with error ${ERROR_CODE}: ${ERROR_MESSAGE});
+					}
+					PlayBackground();
+					Playback(something_went_wrong);
+					Set(CALL_END_TIME=0); // Breaking out of while loop
+					break;
+				case CMD_PLAY:
+					// Stop currently played file if there is and play new one
+					PlayBackground(play,,${WAITEVENTBODY});
+					break;
+				case CMD_PLAY_NEXT:
+					// Enqueue new file to play
+					PlayBackground(&play,,${WAITEVENTBODY});
+					break;
+				case CMD_STOP:
+					// Stop current playback
+					PlayBackground();
+					break;
+				default:
+				}
+			} else {
+				Log(NOTICE,WaitEvent() WAITEVENTSTATUS == ${WAITEVENTSTATUS}; ${WAITEVENTBODY});
+			}
+			Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]); // Update maximum wait time
+		}
+		Hangup();
+	}
+};

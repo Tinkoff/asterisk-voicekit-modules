@@ -19,7 +19,7 @@ context incoming {
 				switch (${WAITEVENTNAME}) {
 				case PlayBackgroundFinished:
 					if (${CURRENT_PHRASE} == 1) {
-						PlayBackground(say,,{"text":"ложка горького"});
+						PlayBackground(say,,{"text":"\u043b\u043e\u0436\u043a\u0430 \u0433\u043e\u0440\u044c\u043a\u043e\u0433\u043e"}); // "ложка горького"
 						Set(CURRENT_PHRASE=2);
 						Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 80]);
 					} else if (${CURRENT_PHRASE} == 2) {

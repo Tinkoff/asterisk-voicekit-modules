@@ -110,6 +110,7 @@ static const char *waitevent_app = "WaitEvent";
 					<para>Contains event body if event is recieved or empty string otherwise.</para>
 				</variable>
 			</variablelist>
+			<para><emphasis>Event generation using AMI is described at examples.</emphasis></para>
 			<example title="Wait 2400ms for next event">
 			 WaitEvent(2.4);
 			</example>
