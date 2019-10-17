@@ -247,17 +247,13 @@ static inline struct ast_filestream *open_stream(struct ast_channel *chan, const
 	if (!fs)
 		return NULL;
 
-	if (!ast_seekstream(fs, 0, SEEK_END)) {
+	if (!ast_seekstream(fs, 0, SEEK_END))
 		*duration_samples = ast_tellstream(fs);
-		if (ast_seekstream(fs, 0, SEEK_SET)) {
-			close_stream(fs);
-			fs = open_stream_simple(chan, filename, preflang);
-		}
-	} else {
+	else
 		*duration_samples = 0;
-	}
 
-	return fs;
+	close_stream(fs);
+	return open_stream_simple(chan, filename, preflang);
 }
 static inline void time_add_samples(struct timespec *dest, int samples)
 {
