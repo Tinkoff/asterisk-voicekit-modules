@@ -90,6 +90,7 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 			<para>This application connects to STT service at specified endpoint.</para>
 			<para>It then sends incomming channel audio frames and recieves recognized text.</para>
 			<para>Upon each recieved recognized phrase a channel user event is generated wich may be catched with WaitEvent() application or AMI subsystem.</para>
+			<para>Following events are generated (event body is specified inside braces):</para>
 			<para><emphasis>At receiving heading metafields of STT session &quot;GRPCSTT_X_REQUEST_ID(X_REQUEST_ID)&quot; event is generated.</emphasis></para>
 			<para><emphasis>At receiving STT recognition hypothesis &quot;GRPCSTT_ASCII(JSON)&quot; and &quot;GRPCSTT_UTF8(JSON)&quot; events are generated.</emphasis></para>
 			<para><emphasis>At session close an &quot;GRPCSTT_SESSION_FINISHED(STATUS,ERROR_CODE,ERROR_MESSAGE)&quot; event is generated.</emphasis></para>
@@ -98,6 +99,17 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 			</example>
 			<example title="Start streaming to STT at example.org:8080 without TLS, with ASCII-encoded Unicode characters, SLinear16 sample format and maximum of 3 alternatives">
 			 GRPCSTTBackground(example.org:8080,A,,slin,3);
+			</example>
+			<example title="Get next event and print details if event is GRPCSTT_SESSION_FINISHED">
+			 WaitEvent(${SLEEP_TIME});
+			 if (${WAITEVENTNAME} == GRPCSTT_SESSION_FINISHED) {
+			         Set(ARRAY(STATUS,ERROR_CODE,ERROR_MESSAGE)=${WAITEVENTBODY});
+			         if (${STATUS} == SUCCESS) {
+			                 Log(NOTICE,Session finished successfully);
+			         } else {
+			                 Log(NOTICE,Session finished with error ${ERROR_CODE}: ${ERROR_MESSAGE});
+			         }
+			 }
 			</example>
 		</description>
 		<see-also>
