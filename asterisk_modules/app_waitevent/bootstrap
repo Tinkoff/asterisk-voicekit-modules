@@ -1,5 +1,6 @@
 #!/bin/sh -e
 
+libtoolize
 aclocal
 autoheader
 automake

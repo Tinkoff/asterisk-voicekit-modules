@@ -37,7 +37,7 @@ public:
 	// Sender-only methods
 	void Push(const std::string &data);
 	void Terminate(bool success);
-	
+
 	// Reader-only methods
 	int EventFD();
 	bool TerminationCalled();

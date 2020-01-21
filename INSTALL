@@ -1,7 +1,14 @@
 Instructions
 ============
 
-First call bootstrap for whole repository:
+Install dependencies into system:
+
+```
+sudo apt-get install asterisk-dev libjansson-dev
+```
+
+
+Call bootstrap for whole repository:
 
 ```
 cd asterisk_modules

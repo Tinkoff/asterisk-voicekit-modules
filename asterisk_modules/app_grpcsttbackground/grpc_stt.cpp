@@ -285,7 +285,7 @@ static struct ast_frame *framehook_event_callback (struct ast_channel *chan, str
 		if (event == AST_FRAMEHOOK_EVENT_READ)
 			(*(std::shared_ptr<GRPCSTT>*) data)->ReapAudioFrame(frame);
 	}
-		
+
 	return frame;
 }
 static int framehook_consume_callback (void *data, enum ast_frame_type type)
@@ -437,7 +437,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 				poll(pfds, 2, 1000);
 				if (pfds[0].revents & POLLIN)
 					break;
-				
+
 				if (!(pfds[1].revents & POLLIN))
 					continue;
 

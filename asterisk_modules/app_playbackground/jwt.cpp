@@ -196,7 +196,7 @@ std::string GenerateJWT(const std::string &api_key, const std::string &secret_ke
 	std::string data = base64_encode_url_safe(header_bytes) + "." + base64_encode_url_safe(payload_bytes);
 
 	std::string secret_decoded = base64_decode(secret_key);
-	
+
 	unsigned char sig[SHA256_DIGEST_LENGTH];
 	unsigned int sig_len;
 	unsigned char *ret = HMAC(EVP_sha256(), secret_decoded.data(), secret_decoded.size(), (const unsigned char *) data.data(), data.size(), sig, &sig_len);

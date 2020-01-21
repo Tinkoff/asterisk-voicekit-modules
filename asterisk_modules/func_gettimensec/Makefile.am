@@ -36,4 +36,4 @@ install-data-local: .xmldocs/func_gettimensec-en_US.xml
 
 
 clobber: distclean
-	rm -rf ./{configure,aclocal.m4,libtool,autom4te.cache,config.h.in,Makefile.in,.xmldocs}
+	rm -rf ./{configure,aclocal.m4,libtool,ltmain.sh,autom4te.cache,config.h.in,Makefile.in,.xmldocs}

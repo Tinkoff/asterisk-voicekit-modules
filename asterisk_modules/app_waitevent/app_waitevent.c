@@ -324,7 +324,7 @@ static struct ht_user_message_queue *init_event_queue(struct ast_channel *chan)
 	ast_channel_lock(chan);
 	ast_channel_datastore_add(chan, datastore);
 	ast_channel_unlock(chan);
-	
+
 	queue->stasis_subscription = stasis_subscribe(topic, (void *) waitevent_subscription_cb, queue);
 
 	return queue;

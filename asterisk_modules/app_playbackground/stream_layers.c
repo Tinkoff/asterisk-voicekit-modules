@@ -61,7 +61,7 @@ void stream_layers_global_uninit()
 	zero_frame.subclass.format = NULL;
 	ao2_ref(format, -1);
 }
-	
+
 
 static void *void_generator_alloc(struct ast_channel *chan, void *data)
 {
@@ -99,7 +99,7 @@ static void check_start_void_generator(struct ast_channel *chan)
 
 	if (generator != &void_generator)
 		ast_activate_generator(chan, &void_generator, NULL);
-}	
+}
 static void check_stop_void_generator(struct ast_channel *chan)
 {
 	struct ast_generator *generator;
@@ -109,7 +109,7 @@ static void check_stop_void_generator(struct ast_channel *chan)
 
 	if (generator == &void_generator)
 		ast_deactivate_generator(chan);
-}	
+}
 
 
 static void push_playbackground_finished_event(struct ast_channel *chan, int layer_i)
@@ -233,7 +233,7 @@ static inline struct ast_filestream *open_stream_simple(struct ast_channel *chan
 		return NULL;
 	}
 	ao2_ref(fs, 1);
-	
+
 	if (ast_test_flag(ast_channel_flags(chan), AST_FLAG_MASQ_NOSTREAM))
 		fs->orig_chan_name = ast_strdup(ast_channel_name(chan));
 	if (ast_applystream(chan, fs))
@@ -311,7 +311,7 @@ static void stream_source_stop(struct stream_source *source)
 	} break;
 	default: {
 	}
-	}	
+	}
 	source->type = STREAM_SOURCE_NONE;
 }
 static inline int stream_source_start_stream_file(struct stream_source *source, const char *fname, struct stream_state *state, double *duration)
@@ -849,7 +849,7 @@ static inline int stream_layer_stream_merged_frame(struct stream_layer *layers, 
 {
 	/* Returns: -1 on error or hangup; 0 on frame written; 1 on efd triggered */
 	struct ast_channel *chan = state->chan;
-	
+
 	/* 1. Make zero frame */
 	struct ast_frame *frame = ast_frdup(&zero_frame);;
 	if (!frame) {
