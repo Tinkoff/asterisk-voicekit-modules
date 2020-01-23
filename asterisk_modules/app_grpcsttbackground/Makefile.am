@@ -13,9 +13,10 @@ app_grpcsttbackground_la_SOURCES = \
 	jwt.cpp \
 	$(PROTO_BUILT_SOURCES)
 app_grpcsttbackground_la_CFLAGS = -Wall -O3 -Werror=implicit-function-declaration -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -I../thirdparty/inst/include \
-	-fPIC -DAST_MODULE=\"app_grpcsttbackground\" -DASTERISK_MODULE_VERSION_STRING=\"`git describe --tags --always`\"
-app_grpcsttbackground_la_CXXFLAGS = -Wall -O3 -std=c++11 -I../thirdparty/inst/include -fPIC
+	-fPIC -DAST_MODULE=\"app_grpcsttbackground\" -DASTERISK_MODULE_VERSION_STRING=\"`git describe --tags --always`\" $(JANSSON_CFLAGS)
+app_grpcsttbackground_la_CXXFLAGS = -Wall -O3 -std=c++11 -I../thirdparty/inst/include -fPIC $(JANSSON_CFLAGS)
 app_grpcsttbackground_la_LDFLAGS = -Wl,-E -pthread -g -module -avoid-version -ldl -Wl,-fuse-ld=gold \
+	 $(JANSSON_LIBS) \
 	../thirdparty/inst/lib/libprotobuf.a \
 	../thirdparty/inst/lib/libprotoc.a \
 	../thirdparty/inst/lib/libaddress_sorting.a \
