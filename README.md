@@ -4,6 +4,9 @@ INTRODUCTION
 This document provides a brief description of the VoiceKit modules for Asterisk.
 Each module may be used individually although there are shared thitd party repositories.
 
+Following presentation may be helpful for Russian speakers as an introduction:
+https://www.youtube.com/watch?v=4LRcaSM46t8
+
 
 INSTALLATION
 ------------
