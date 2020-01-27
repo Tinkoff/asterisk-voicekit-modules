@@ -4,7 +4,7 @@ Instructions
 Install dependencies into system:
 
 ```
-sudo apt-get install asterisk-dev libjansson-dev libopus-dev
+sudo apt-get install asterisk-dev libopus-dev
 ```
 
 

@@ -4,3 +4,4 @@
 patch -p0 -i grpc-build.patch
 patch -p0 -i grpc-transport_fd_pipe.patch
 (git clone https://github.com/googleapis/googleapis.git -b common-protos-1_3_1 && cd googleapis && git submodule update --init --recursive)
+curl http://www.digip.org/jansson/releases/jansson-2.12.tar.gz|tar xz

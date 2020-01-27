@@ -21,6 +21,4 @@ AC_SUBST(asteriskmoduledir)
 asterisk_xmldoc_dir="$localstatedir/lib/asterisk/documentation"
 AC_SUBST(asterisk_xmldoc_dir)
 
-PKG_CHECK_MODULES([JANSSON],[jansson >= 1.0.0])
-
 AC_OUTPUT
