@@ -166,6 +166,8 @@ static struct playback_control_message *make_playback_control_message(const char
 {
 	size_t len = strlen(command);
 	struct playback_control_message *s = ast_calloc(sizeof(struct playback_control_message) + len + 1, 1);
+	if (!s)
+		return NULL;
 	s->command = memcpy((void*) (s + 1), command, len);
 	s->command[len] = '\0';
 	return s;
@@ -201,6 +203,8 @@ static const struct ast_datastore_info playbackground_ds_info = {
 static struct ht_playback_control *make_ht_playback_control(void)
 {
 	struct ht_playback_control *s = ast_calloc(sizeof(struct ht_playback_control), 1);
+	if (!s)
+		return NULL;
 	s->eventfd = eventfd(0, 0);
 	fcntl(s->eventfd, F_SETFL, fcntl(s->eventfd, F_GETFL) | O_NONBLOCK);
 	ast_mutex_init(&s->mutex);
@@ -436,7 +440,11 @@ static int playbackground_exec(struct ast_channel *chan, const char *data)
 	}
 	if (!empty) {
 		struct playback_control_message *entry = make_playback_control_message(data);
-		AST_DLLIST_INSERT_TAIL(&layer_control->entries, entry, list_meta);
+		if (entry) {
+			AST_DLLIST_INSERT_TAIL(&layer_control->entries, entry, list_meta);
+		} else {
+			ast_log(LOG_ERROR, "Failed to create 'app_playbackground' control message\n");
+		}
 	}
 	eventfd_write(control->eventfd, 1);
 	ast_mutex_unlock(&control->mutex);
