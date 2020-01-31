@@ -116,10 +116,24 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 			<ref type="application">WaitEvent</ref>
 			<ref type="application">WaitEventInit</ref>
 			<ref type="application">PlayBackground</ref>
+			<ref type="application">GRPCSTTBackgroundFinish</ref>
+		</see-also>
+	</application>
+	<application name="GRPCSTTBackgroundFinish" language="en_US">
+		<synopsis>
+			Finish speech recognition session.
+		</synopsis>
+		<description>
+			<para>This application terminates speech recognition session previously runned by GRPCSTTBackground().</para>
+			<para>It is safe to call GRPCSTTBackgroundFinish() even if no GRPCSTTBackground() was previously called.</para>
+		</description>
+		<see-also>
+			<ref type="application">GRPCSTTBackground</ref>
 		</see-also>
 	</application>
  ***/
 static const char app[] = "GRPCSTTBackground";
+static const char app_finish[] = "GRPCSTTBackgroundFinish";
 
 enum grpcsttbackground_flags {
 	GRPCSTTBACKGROUND_FLAG_NO_SSL_GRPC = (1 << 1),
@@ -132,6 +146,7 @@ AST_APP_OPTIONS(grpcsttbackground_opts, {
 });
 
 struct thread_conf {
+	int terminate_event_fd;
 	char *authorization_api_key;
 	char *authorization_secret_key;
 	char *authorization_issuer;
@@ -155,6 +170,7 @@ struct thread_conf {
 };
 
 static struct thread_conf dflt_thread_conf = {
+	.terminate_event_fd = -1,
 	.authorization_api_key = NULL,
 	.authorization_secret_key = NULL,
 	.authorization_issuer = NULL,
@@ -234,6 +250,7 @@ static struct thread_conf *make_thread_conf(const struct thread_conf *source)
 	if (!conf)
 		return NULL;
 	void *p = conf + 1;
+	conf->terminate_event_fd = -1;
 	conf->chan = source->chan;
 
 	conf->authorization_api_key = source->authorization_api_key ? strcpy(p, source->authorization_api_key) : NULL;
@@ -269,13 +286,14 @@ static struct thread_conf *make_thread_conf(const struct thread_conf *source)
 static void *thread_start(struct thread_conf *conf)
 {
 	struct ast_channel *chan = conf->chan;
-	grpc_stt_run(conf->endpoint, conf->authorization_api_key, conf->authorization_secret_key,
+	grpc_stt_run(conf->terminate_event_fd, conf->endpoint, conf->authorization_api_key, conf->authorization_secret_key,
 		     conf->authorization_issuer, conf->authorization_subject, conf->authorization_audience,
 		     chan, conf->ssl_grpc, conf->ca_data, conf->language_code, conf->max_alternatives, conf->frame_format,
 		     conf->vad_disable, conf->vad_min_speech_duration, conf->vad_max_speech_duration,
 		     conf->vad_silence_duration_threshold, conf->vad_silence_prob_threshold, conf->vad_aggressiveness,
 		     conf->interim_results_enable, conf->interim_results_interval);
 
+	close(conf->terminate_event_fd);
 	ast_channel_unref(chan);
 	ast_free(conf);
 	return NULL;
@@ -425,6 +443,86 @@ static int load_config(int reload)
 
 	return 0;
 }
+struct grpcsttbackground_control {
+	int terminate_event_fd;
+};
+static struct grpcsttbackground_control *make_grpcsttbackground_control(int terminate_event_fd)
+{
+	struct grpcsttbackground_control *s = ast_calloc(sizeof(struct grpcsttbackground_control), 1);
+	if (!s)
+		return NULL;
+	s->terminate_event_fd = terminate_event_fd;
+	return s;
+}
+static void destroy_grpcsttbackground_control(void *void_s)
+{
+	struct grpcsttbackground_control *s = void_s;
+	eventfd_write(s->terminate_event_fd, 1);
+	close(s->terminate_event_fd);
+	ast_free(s);
+}
+static const struct ast_datastore_info grpcsttbackground_ds_info = {
+	.type = "grpcsttbackground",
+	.destroy = destroy_grpcsttbackground_control,
+};
+static void clear_channel_control_state_unlocked(struct ast_channel *chan)
+{
+	struct ast_datastore *datastore = ast_channel_datastore_find(chan, &grpcsttbackground_ds_info, NULL);
+	if (datastore) {
+		ast_channel_datastore_remove(chan, datastore);
+		ast_datastore_free(datastore);
+	}
+}
+static void clear_channel_control_state(struct ast_channel *chan)
+{
+	ast_channel_lock(chan);
+	clear_channel_control_state_unlocked(chan);
+	ast_channel_unlock(chan);
+}
+static void replace_channel_control_state_unlocked(struct ast_channel *chan, int terminate_event_fd)
+{
+	clear_channel_control_state_unlocked(chan);
+
+	struct grpcsttbackground_control *control = make_grpcsttbackground_control(terminate_event_fd);
+	if (!control)
+		return;
+	struct ast_datastore *datastore = ast_datastore_alloc(&grpcsttbackground_ds_info, NULL);
+	if (!datastore) {
+		destroy_grpcsttbackground_control(control);
+		return;
+	}
+	datastore->data = control;
+	ast_channel_datastore_add(chan, datastore);
+}
+static void replace_channel_control_state(struct ast_channel *chan, int terminate_event_fd)
+{
+	ast_channel_lock(chan);
+	replace_channel_control_state_unlocked(chan, terminate_event_fd);
+	ast_channel_unlock(chan);
+}
+
+static int make_event_fd_pair(int *parent_fd_p, int *child_fd_p)
+{
+	int parent_fd = eventfd(0, 0);
+	if (parent_fd < 0) {
+		*parent_fd_p = -1;
+		*child_fd_p = -1;
+		return -1;
+	}
+	int child_fd = dup(parent_fd);
+	if (child_fd < 0) {
+		int saved_errno = errno;
+		close(parent_fd);
+		*parent_fd_p = -1;
+		*child_fd_p = -1;
+		errno = saved_errno;
+		return -1;
+	}
+	*parent_fd_p = parent_fd;
+	*child_fd_p = child_fd;
+	return 0;
+}
+
 static int grpcsttbackground_exec(struct ast_channel *chan, const char *data)
 {
 	ast_mutex_lock(&dflt_thread_conf_mutex);
@@ -501,11 +599,30 @@ static int grpcsttbackground_exec(struct ast_channel *chan, const char *data)
 	ast_mutex_unlock(&dflt_thread_conf_mutex);
 	if (!conf) {
 		ast_channel_unref(chan);
-		return 0;
+		return -1;
 	}
+	int terminate_event_fd, child_terminate_event_fd;
+	if (make_event_fd_pair(&terminate_event_fd, &child_terminate_event_fd)) {
+		ast_channel_unref(chan);
+		return -1;
+	}
+	
+	conf->terminate_event_fd = child_terminate_event_fd;
 	pthread_t thread;
-	ast_pthread_create_detached_background(&thread, NULL, (void *) thread_start, conf);
+	if (ast_pthread_create_detached_background(&thread, NULL, (void *) thread_start, conf)) {
+		ast_log(AST_LOG_ERROR, "Failed to start thread\n");
+		ast_channel_unref(chan);
+		close(terminate_event_fd);
+		close(child_terminate_event_fd);
+		return -1;
+	}
+	replace_channel_control_state(chan, terminate_event_fd);
 
+	return 0;
+}
+static int grpcsttbackgroundfinish_exec(struct ast_channel *chan, const char *data)
+{
+	clear_channel_control_state(chan);
 	return 0;
 }
 
@@ -516,13 +633,17 @@ static int unload_module(void)
 	ast_mutex_lock(&dflt_thread_conf_mutex);
 	clear_config();
 	ast_mutex_unlock(&dflt_thread_conf_mutex);
-	return ast_unregister_application(app);
+	return
+		ast_unregister_application(app) |
+		ast_unregister_application(app_finish);
 }
 
 static int load_module(void)
 {
 	grpc_init();
-	if (load_config(0) || ast_register_application_xml(app, grpcsttbackground_exec))
+	if (load_config(0) ||
+	    (ast_register_application_xml(app, grpcsttbackground_exec) |
+	     ast_register_application_xml(app_finish, grpcsttbackgroundfinish_exec)))
 		return AST_MODULE_LOAD_DECLINE;
 	return AST_MODULE_LOAD_SUCCESS;
 }

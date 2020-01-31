@@ -32,6 +32,7 @@ enum grpc_stt_frame_format {
 };
 
 extern void grpc_stt_run(
+	int terminate_event_fd,
 	const char *target,
 	const char *authorization_api_key,
 	const char *authorization_secret_key,

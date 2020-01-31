@@ -240,7 +240,7 @@ public:
 	static void AttachToChannel(std::shared_ptr<GRPCSTT> &grpc_stt);
 
 public:
-	GRPCSTT(std::shared_ptr<grpc::Channel> grpc_channel,
+	GRPCSTT(int terminate_event_fd, std::shared_ptr<grpc::Channel> grpc_channel,
 		const char *authorization_api_key, const char *authorization_secret_key,
 		const char *authorization_issuer, const char *authorization_subject, const char *authorization_audience,
 		struct ast_channel *chan,
@@ -254,6 +254,7 @@ public:
 	bool Run(int &error_status, std::string &error_message);
 
 private:
+	int terminate_event_fd;
 	std::unique_ptr<tinkoff::cloud::stt::v1::SpeechToText::Stub> stt_stub;
 	std::string authorization_api_key;
 	std::string authorization_secret_key;
@@ -264,7 +265,6 @@ private:
 	std::string language_code;
 	int max_alternatives;
 	enum grpc_stt_frame_format frame_format;
-	int terminate_event_fd;
 	int frame_event_fd;
 	struct grpcstt_frame_list audio_frames;
 	int framehook_id;
@@ -310,14 +310,14 @@ void GRPCSTT::AttachToChannel(std::shared_ptr<GRPCSTT> &grpc_stt)
 	ast_framehook_attach(grpc_stt->chan, &interface);
 	ast_channel_unlock(grpc_stt->chan);
 }
-GRPCSTT::GRPCSTT(std::shared_ptr<grpc::Channel> grpc_channel,
+GRPCSTT::GRPCSTT(int terminate_event_fd, std::shared_ptr<grpc::Channel> grpc_channel,
 		 const char *authorization_api_key, const char *authorization_secret_key,
 		 const char *authorization_issuer, const char *authorization_subject, const char *authorization_audience,
 		 struct ast_channel *chan, const char *language_code, int max_alternatives, enum grpc_stt_frame_format frame_format,
 		 bool vad_disable, double vad_min_speech_duration, double vad_max_speech_duration,
 		 double vad_silence_duration_threshold, double vad_silence_prob_threshold, double vad_aggressiveness,
 		 bool interim_results_enable, double interim_results_interval)
-	: stt_stub(tinkoff::cloud::stt::v1::SpeechToText::NewStub(grpc_channel)),
+	: terminate_event_fd(terminate_event_fd), stt_stub(tinkoff::cloud::stt::v1::SpeechToText::NewStub(grpc_channel)),
 	authorization_api_key(authorization_api_key), authorization_secret_key(authorization_secret_key),
 	authorization_issuer(authorization_issuer), authorization_subject(authorization_subject), authorization_audience(authorization_audience),
 	chan(chan), language_code(language_code), max_alternatives(max_alternatives), frame_format(frame_format),
@@ -325,7 +325,6 @@ GRPCSTT::GRPCSTT(std::shared_ptr<grpc::Channel> grpc_channel,
 	vad_silence_duration_threshold(vad_silence_duration_threshold), vad_silence_prob_threshold(vad_silence_prob_threshold), vad_aggressiveness(vad_aggressiveness),
 	interim_results_enable(interim_results_enable), interim_results_interval(interim_results_interval)
 {
-	terminate_event_fd = eventfd(0, 0);
 	frame_event_fd = eventfd(0, 0);
 	fcntl(frame_event_fd, F_SETFL, fcntl(frame_event_fd, F_GETFL) | O_NONBLOCK);
 	AST_LIST_HEAD_INIT(&audio_frames);
@@ -333,7 +332,6 @@ GRPCSTT::GRPCSTT(std::shared_ptr<grpc::Channel> grpc_channel,
 GRPCSTT::~GRPCSTT()
 {
 	close(frame_event_fd);
-	close(terminate_event_fd);
 
 	AST_LIST_LOCK(&audio_frames);
 	struct ast_frame *f;
@@ -494,7 +492,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 }
 
 
-extern "C" void grpc_stt_run(const char *endpoint, const char *authorization_api_key, const char *authorization_secret_key,
+extern "C" void grpc_stt_run(int terminate_event_fd, const char *endpoint, const char *authorization_api_key, const char *authorization_secret_key,
 			     const char *authorization_issuer, const char *authorization_subject, const char *authorization_audience,
 			     struct ast_channel *chan, int ssl_grpc, const char *ca_data,
 			     const char *language_code, int max_alternatives, enum grpc_stt_frame_format frame_format,
@@ -510,7 +508,8 @@ extern "C" void grpc_stt_run(const char *endpoint, const char *authorization_api
 			.pem_root_certs = ca_data ? ca_data : grpc_roots_pem_string,
 		};
 #define NON_NULL_STRING(str) ((str) ? (str) : "")
-		std::shared_ptr<GRPCSTT> grpc_stt = std::make_shared<GRPCSTT> (
+		std::shared_ptr<GRPCSTT> grpc_stt = std::make_shared<GRPCSTT>(
+			terminate_event_fd,
 			grpc::CreateChannel(endpoint, (ssl_grpc ? grpc::SslCredentials(ssl_credentials_options) : grpc::InsecureChannelCredentials())),
 			NON_NULL_STRING(authorization_api_key), NON_NULL_STRING(authorization_secret_key),
 			NON_NULL_STRING(authorization_issuer), NON_NULL_STRING(authorization_subject), NON_NULL_STRING(authorization_audience),
