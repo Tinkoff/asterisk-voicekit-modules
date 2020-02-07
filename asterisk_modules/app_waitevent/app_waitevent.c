@@ -429,11 +429,15 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 			},
 		};
 
-		if ((ppoll(pollfds, 2, &rel_timeout, NULL) > 0) && (pollfds[1].revents & POLLIN)) {
-			if (ast_check_hangup_locked(chan)) {
-				set_fail_status(chan, "HANGUP");
-				return 0;
+		if (ppoll(pollfds, 2, &rel_timeout, NULL) > 0) {
+			if (pollfds[1].revents & POLLIN) {
+				if (ast_check_hangup_locked(chan)) {
+					set_fail_status(chan, "HANGUP");
+					return 0;
+				}
 			}
+			eventfd_t value;
+			eventfd_read(queue->efd, &value);
 		}
 	}
 
