@@ -436,8 +436,10 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 					return 0;
 				}
 			}
-			eventfd_t value;
-			eventfd_read(queue->efd, &value);
+			if (pollfds[0].revents & POLLIN) {
+				eventfd_t value;
+				eventfd_read(queue->efd, &value);
+			}
 		}
 	}
 
