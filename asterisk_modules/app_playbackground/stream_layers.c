@@ -33,6 +33,7 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 #include <math.h>
 
 
+/* NOTE: ZERO_FRAME_SAMPLES must be divisor of SAMPLE_RATE */
 #define SAMPLE_RATE 8000
 #define ZERO_FRAME_SAMPLE_RATE SAMPLE_RATE
 #define ZERO_FRAME_SAMPLES 160
@@ -264,6 +265,38 @@ static inline void time_add_samples(struct timespec *dest, int samples)
 		dest->tv_nsec -= 1000000000;
 	}
 }
+static inline int time_less(const struct timespec *a, const struct timespec *b)
+{
+	return a->tv_sec < b->tv_sec || (a->tv_sec == b->tv_sec && a->tv_nsec < b->tv_nsec);
+}
+static void time_align_frame_time(struct timespec *frame_time)
+{
+#define FRAME_NSECS (((int64_t) 1000000000)*ZERO_FRAME_SAMPLES/SAMPLE_RATE)
+	frame_time->tv_nsec = (frame_time->tv_nsec + (FRAME_NSECS - 1))/FRAME_NSECS*FRAME_NSECS;
+	if (frame_time->tv_nsec >= 1000000000) {
+		frame_time->tv_sec++;
+		frame_time->tv_nsec -= 1000000000;
+	}
+#undef FRAME_NSECS
+}
+static void update_next_frame_time(struct timespec *frame_time)
+{
+	struct timespec current_time;
+	if (clock_gettime(CLOCK_MONOTONIC_RAW, &current_time)) {
+		ast_log(AST_LOG_ERROR, "Failed to get current time: %s\n", strerror(errno));
+		return;
+	}
+	if (frame_time->tv_sec == -1) {
+		*frame_time = current_time;
+		time_align_frame_time(frame_time);
+		return;
+	}
+	time_add_samples(frame_time, ZERO_FRAME_SAMPLES);
+	if (time_less(frame_time, &current_time)) {
+		*frame_time = current_time;
+		time_align_frame_time(frame_time);
+	}	
+}
 static inline int wait_for_deadline(const struct timespec *deadline, int efd)
 {
 	/* Returns: -1 on fail; 0 on timeout; 1 on efd triggered */
@@ -374,7 +407,11 @@ static inline int stream_source_synthesis_get_duration(struct stream_source *sou
 	}
 	return 0;
 }
-static inline int stream_source_synthesis_buffer_frame(struct stream_source *source, int samples_to_buffer)
+static inline int stream_source_synthesis_eos(struct stream_source *source)
+{
+	return grpctts_job_termination_called(source->source.synthesis.job);
+}
+static inline int stream_source_synthesis_buffer_frame(struct stream_source *source)
 {
 	grpctts_job_collect(source->source.synthesis.job);
 	size_t sample_count = grpctts_job_buffer_size(source->source.synthesis.job) >> 1;
@@ -394,12 +431,6 @@ static inline int stream_source_synthesis_buffer_frame(struct stream_source *sou
 	} else {
 		if (grpctts_job_termination_called(source->source.synthesis.job))
 			return grpctts_job_completion_success(source->source.synthesis.job) ? 0 : -1;
-
-		/* Starving for frames: filling with silence */
-		struct ast_frame *fr = alloc_frame(samples_to_buffer);
-		memset(fr->data.ptr, 0, samples_to_buffer*sizeof(int16_t));
-		source->source.synthesis.buffered_frame = fr;
-		source->source.synthesis.buffered_frame_off = 0;
 	}
 	return 0;
 }
@@ -542,9 +573,8 @@ static int parse_say_args(struct grpctts_job_conf *conf, struct grpctts_job_inpu
 	char *eptr;
 	while (*arg) {
 		char *sep = find_non_escaped_colon(arg);
-		if (!sep)
-			break;
-		*sep = '\0';
+		if (sep)
+			*sep = '\0';
 		char *str_value;
 		if ((str_value = check_param(arg, "pitch"))) {
 			double value = strtod(str_value, &eptr);
@@ -603,6 +633,8 @@ static int parse_say_args(struct grpctts_job_conf *conf, struct grpctts_job_inpu
 			return -1;
 		}
 
+		if (!sep)
+			break;
 		arg = sep + 1;
 	}
 	*arg_sep = ',';
@@ -768,13 +800,14 @@ static inline int merge_source_synthesis(struct stream_source *source, short **t
 {
 	struct stream_source_synthesis *synthesis = &source->source.synthesis;
 	if (!synthesis->buffered_frame) {
-		if (stream_source_synthesis_buffer_frame(source, *samples_to_merge) == -1) {
+		if (stream_source_synthesis_buffer_frame(source) == -1) {
 			stream_source_stop(source);
 			return -1;
 		}
 	}
 	if (!synthesis->buffered_frame) {
-		stream_source_stop(source);
+		if (stream_source_synthesis_eos(source))
+			stream_source_stop(source);
 		return 0;
 	}
 	int sample_count = synthesis->buffered_frame->samples;
@@ -790,8 +823,26 @@ static inline int merge_source_synthesis(struct stream_source *source, short **t
 	if (synthesis->buffered_frame_off == sample_count) {
 		ast_frfree(synthesis->buffered_frame);
 		synthesis->buffered_frame = NULL;
+		if (*samples_to_merge) {
+			if (stream_source_synthesis_buffer_frame(source) == -1) {
+				stream_source_stop(source);
+				return -1;
+			}
+			if (!synthesis->buffered_frame)
+				return !*samples_to_merge;
+			int sample_count = synthesis->buffered_frame->samples;
+			short *source_data = synthesis->buffered_frame->data.ptr;
+			while (synthesis->buffered_frame_off < sample_count) {
+				if (!*samples_to_merge)
+					return 1;
+				ast_slinear_saturated_add(*target_data, source_data + synthesis->buffered_frame_off);
+				++(*target_data);
+				--(*samples_to_merge);
+				++(synthesis->buffered_frame_off);
+			}
+		}
 	}
-	return 1;
+	return !*samples_to_merge;
 }
 static inline void stream_layer_merge_frame(struct ast_frame *target_frame, struct stream_layer *layer, struct stream_state *state, int layer_i)
 {
@@ -908,13 +959,7 @@ static inline int stream_layer_stream_merged_frame(struct stream_layer *layers, 
 		check_stop_void_generator(chan);
 
 	/* 5. Update next frame time */
-	if (state->next_frame_time.tv_sec == -1) {
-		if (clock_gettime(CLOCK_MONOTONIC_RAW, &state->next_frame_time)) {
-			ast_log(AST_LOG_ERROR, "Failed to get current time: %s\n", strerror(errno));
-			return -1;
-		}
-	}
-	time_add_samples(&state->next_frame_time, ZERO_FRAME_SAMPLES);
+	update_next_frame_time(&state->next_frame_time);
 
 	return 0;
 }
