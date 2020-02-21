@@ -44,3 +44,10 @@ subject=subject
 
 ;Set audience for authorization. Default: ""
 audience=tinkoff.cloud.tts
+
+
+[buffering]
+
+;Set minimal buffer size before playback start as fraction + seconds. Default: "0s"
+;Three forms are allowed: fraction (e. g., "30.3%", "25%"), seconds (e. g., "2s", "1.2s") and fractions+seconds (e. g., "25%+3.3s").
+initial_buffer_size=30%+3s

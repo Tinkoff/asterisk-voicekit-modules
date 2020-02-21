@@ -380,6 +380,9 @@ static inline void stream_source_start_synthesis(struct stream_source *source, s
 	source->source.synthesis.chan = state->chan;
 	source->source.synthesis.job = grpctts_channel_start_job(state->tts_channel, conf, job_input);
 	source->source.synthesis.buffered_frame = NULL;
+	source->source.synthesis.initial_buffer_size = conf->initial_buffer_size;
+	source->source.synthesis.initial_buffer_samples = 0;
+	source->source.synthesis.initial_buffer_reached = 0;
 	source->source.synthesis.duration_announced = 0;
 }
 static inline void stream_source_file_buffer_frame(struct stream_source *source)
@@ -416,6 +419,12 @@ static inline int stream_source_synthesis_buffer_frame(struct stream_source *sou
 	grpctts_job_collect(source->source.synthesis.job);
 	size_t sample_count = grpctts_job_buffer_size(source->source.synthesis.job) >> 1;
 	if (sample_count) {
+		/* If (sample_count < minimal_sample_count) but end isn't reached */
+		if (sample_count < source->source.synthesis.initial_buffer_samples) {
+			if (!grpctts_job_termination_called(source->source.synthesis.job))
+				return 0;
+		}
+		source->source.synthesis.initial_buffer_reached = 1;
 		struct ast_frame *fr = alloc_frame(sample_count);
 		if (!fr) {
 			ast_log(LOG_ERROR, "PlayBackground() failed: memory allocation error\n");
@@ -626,6 +635,14 @@ static int parse_say_args(struct grpctts_job_conf *conf, struct grpctts_job_inpu
 				conf->remote_frame_format = GRPCTTS_FRAME_FORMAT_OPUS;
 			} else {
 				ast_log(AST_LOG_ERROR, "PlayBackground: unsupported remote frame format '%s'\n", str_value);
+				return -1;
+			}
+		} else if ((str_value = check_param(arg, "initial_buffer_size"))) {
+			struct grpctts_buffer_size initial_buffer_size;
+			if (grpctts_parse_buffer_size(&initial_buffer_size, str_value)) {
+				conf->initial_buffer_size = initial_buffer_size;
+			} else {
+				ast_log(AST_LOG_ERROR, "PlayBackground: failed to parse buffer size '%s'\n", str_value);
 				return -1;
 			}
 		} else {
@@ -881,6 +898,11 @@ static inline void stream_layer_merge_frame(struct ast_frame *target_frame, stru
 					continue;
 				push_playbackground_duration_event(state->chan, layer_i, ((double) duration_samples)/SAMPLE_RATE);
 				source->source.synthesis.duration_announced = 1;
+				source->source.synthesis.initial_buffer_samples = (size_t)
+					(source->source.synthesis.initial_buffer_size.fraction*duration_samples*0.01 +
+					 source->source.synthesis.initial_buffer_size.seconds*SAMPLE_RATE);
+				if (source->source.synthesis.initial_buffer_samples < 0)
+					source->source.synthesis.initial_buffer_samples = 0;
 			}
 			int ret = merge_source_synthesis(source, &target_data, &samples_to_merge);
 			if (ret == -1) {

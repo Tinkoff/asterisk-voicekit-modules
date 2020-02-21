@@ -40,6 +40,11 @@ enum grpctts_voice_gender {
 	GRPCTTS_VOICE_GENDER_NEUTRAL = 3,
 };
 
+struct grpctts_buffer_size {
+	double fraction;
+	double seconds;
+};
+
 struct grpctts_job_conf {
 	double speaking_rate;
 	double pitch;
@@ -48,6 +53,7 @@ struct grpctts_job_conf {
 	char *voice_name;
 	enum grpctts_voice_gender voice_gender;
 	enum grpctts_frame_format remote_frame_format;
+	struct grpctts_buffer_size initial_buffer_size;
 };
 
 struct grpctts_conf {
@@ -87,9 +93,17 @@ struct grpctts_conf {
 }
 
 
+extern void grpctts_conf_global_init(void);
+
+extern void grpctts_conf_global_uninit(void);
+
+
 extern char *grpctts_load_ca_from_file(
 	const char *relative_fname);
 
+extern int grpctts_parse_buffer_size(
+	struct grpctts_buffer_size *buffer_size,
+	const char *str);
 
 extern void grpctts_job_conf_init(
 	struct grpctts_job_conf *conf);
