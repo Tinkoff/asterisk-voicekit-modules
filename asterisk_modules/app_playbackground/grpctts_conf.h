@@ -40,6 +40,13 @@ enum grpctts_voice_gender {
 	GRPCTTS_VOICE_GENDER_NEUTRAL = 3,
 };
 
+enum grpctts_starvation_policy {
+	GRPCTTS_STARVATION_POLICY_UNSPECIFIED = 0,
+	GRPCTTS_STARVATION_POLICY_WAIT = 1, /* Default */
+	GRPCTTS_STARVATION_POLICY_DROPOUT = 2,
+	GRPCTTS_STARVATION_POLICY_ABANDON = 3,
+};
+
 struct grpctts_buffer_size {
 	double fraction;
 	double seconds;
@@ -53,6 +60,7 @@ struct grpctts_job_conf {
 	char *voice_name;
 	enum grpctts_voice_gender voice_gender;
 	enum grpctts_frame_format remote_frame_format;
+	enum grpctts_starvation_policy starvation_policy;
 	struct grpctts_buffer_size initial_buffer_size;
 };
 
@@ -103,6 +111,9 @@ extern char *grpctts_load_ca_from_file(
 
 extern int grpctts_parse_buffer_size(
 	struct grpctts_buffer_size *buffer_size,
+	const char *str);
+
+extern int grpctts_parse_starvation_policy(
 	const char *str);
 
 extern void grpctts_job_conf_init(

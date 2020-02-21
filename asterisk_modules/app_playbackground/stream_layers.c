@@ -380,7 +380,9 @@ static inline void stream_source_start_synthesis(struct stream_source *source, s
 	source->source.synthesis.chan = state->chan;
 	source->source.synthesis.job = grpctts_channel_start_job(state->tts_channel, conf, job_input);
 	source->source.synthesis.buffered_frame = NULL;
+	source->source.synthesis.starvation_policy = conf->starvation_policy;
 	source->source.synthesis.initial_buffer_size = conf->initial_buffer_size;
+	source->source.synthesis.dropout_frames = 0;
 	source->source.synthesis.initial_buffer_samples = 0;
 	source->source.synthesis.initial_buffer_reached = 0;
 	source->source.synthesis.duration_announced = 0;
@@ -522,6 +524,10 @@ static char *unescape_str_inplace(char *str)
 	*dst = '\0';
 	return str;
 }
+static inline size_t size_min(size_t a, size_t b)
+{
+	return (a < b) ? a : b;
+}
 struct parse_say_input_state {
 	struct ast_json *root;
 };
@@ -639,6 +645,14 @@ static int parse_say_args(struct grpctts_job_conf *conf, struct grpctts_job_inpu
 				conf->initial_buffer_size = initial_buffer_size;
 			} else {
 				ast_log(AST_LOG_ERROR, "PlayBackground: failed to parse buffer size '%s'\n", str_value);
+				return -1;
+			}
+		} else if ((str_value = check_param(arg, "starvation_policy"))) {
+			enum grpctts_starvation_policy starvation_policy = grpctts_parse_starvation_policy(str_value);
+			if (starvation_policy != GRPCTTS_STARVATION_POLICY_UNSPECIFIED) {
+				conf->starvation_policy = starvation_policy;
+			} else {
+				ast_log(AST_LOG_ERROR, "PlayBackground: unsupported starvation policy '%s'\n", str_value);
 				return -1;
 			}
 		} else {
@@ -809,6 +823,26 @@ static inline void merge_source_sleep(struct stream_source *source, int *samples
 		stream_source_stop(source);
 	}
 }
+static int merge_fill_source_synthesis(struct stream_source *source, short **target_data, int *samples_to_merge)
+{
+	struct stream_source_synthesis *synthesis = &source->source.synthesis;
+	int sample_count = synthesis->buffered_frame->samples;
+	short *source_data = synthesis->buffered_frame->data.ptr;
+	if (source->source.synthesis.dropout_frames && synthesis->buffered_frame_off < sample_count) {
+		size_t skip_samples = size_min(source->source.synthesis.dropout_frames, sample_count - synthesis->buffered_frame_off);
+		synthesis->buffered_frame_off += skip_samples;
+		source->source.synthesis.dropout_frames -= skip_samples;
+	}
+	while (synthesis->buffered_frame_off < sample_count) {
+		if (!*samples_to_merge)
+			return 1;
+		ast_slinear_saturated_add(*target_data, source_data + synthesis->buffered_frame_off);
+		++(*target_data);
+		--(*samples_to_merge);
+		++(synthesis->buffered_frame_off);
+	}
+	return 0;
+}	
 static inline int merge_source_synthesis(struct stream_source *source, short **target_data, int *samples_to_merge)
 {
 	struct stream_source_synthesis *synthesis = &source->source.synthesis;
@@ -818,18 +852,25 @@ static inline int merge_source_synthesis(struct stream_source *source, short **t
 			return -1;
 		}
 	}
-	if (!synthesis->buffered_frame)
+	if (!synthesis->buffered_frame) {
+		if (source->source.synthesis.initial_buffer_reached) {
+			switch (source->source.synthesis.starvation_policy) {
+			case GRPCTTS_STARVATION_POLICY_DROPOUT:
+				source->source.synthesis.dropout_frames += *samples_to_merge;
+				break;
+			case GRPCTTS_STARVATION_POLICY_ABANDON:
+				stream_source_stop(source);
+				return -1;
+			default:
+				break;
+			}
+			*samples_to_merge = 0;
+		}
 		return 0;
-	int sample_count = synthesis->buffered_frame->samples;
-	short *source_data = synthesis->buffered_frame->data.ptr;
-	while (synthesis->buffered_frame_off < sample_count) {
-		if (!*samples_to_merge)
-			return 1;
-		ast_slinear_saturated_add(*target_data, source_data + synthesis->buffered_frame_off);
-		++(*target_data);
-		--(*samples_to_merge);
-		++(synthesis->buffered_frame_off);
 	}
+	if (merge_fill_source_synthesis(source, target_data, samples_to_merge))
+		return 1;
+	int sample_count = synthesis->buffered_frame->samples;
 	if (synthesis->buffered_frame_off == sample_count) {
 		ast_frfree(synthesis->buffered_frame);
 		synthesis->buffered_frame = NULL;
@@ -838,21 +879,38 @@ static inline int merge_source_synthesis(struct stream_source *source, short **t
 				stream_source_stop(source);
 				return -1;
 			}
-			if (!synthesis->buffered_frame)
-				return !*samples_to_merge;
-			int sample_count = synthesis->buffered_frame->samples;
-			short *source_data = synthesis->buffered_frame->data.ptr;
-			while (synthesis->buffered_frame_off < sample_count) {
-				if (!*samples_to_merge)
-					return 1;
-				ast_slinear_saturated_add(*target_data, source_data + synthesis->buffered_frame_off);
-				++(*target_data);
-				--(*samples_to_merge);
-				++(synthesis->buffered_frame_off);
+			if (!synthesis->buffered_frame) {
+				switch (source->source.synthesis.starvation_policy) {
+				case GRPCTTS_STARVATION_POLICY_DROPOUT:
+					source->source.synthesis.dropout_frames += *samples_to_merge;
+					break;
+				case GRPCTTS_STARVATION_POLICY_ABANDON:
+					stream_source_stop(source);
+					return -1;
+				default:
+					break;
+				}
+				*samples_to_merge = 0;
+				return 1;
 			}
+			if (merge_fill_source_synthesis(source, target_data, samples_to_merge))
+				return 1;
 		}
 	}
-	return !*samples_to_merge;
+	if (*samples_to_merge) {
+		switch (source->source.synthesis.starvation_policy) {
+		case GRPCTTS_STARVATION_POLICY_DROPOUT:
+			source->source.synthesis.dropout_frames += *samples_to_merge;
+			break;
+		case GRPCTTS_STARVATION_POLICY_ABANDON:
+			stream_source_stop(source);
+			return -1;
+		default:
+			break;
+		}
+		*samples_to_merge = 0;
+	}
+	return 1;
 }
 static inline void stream_layer_merge_frame(struct ast_frame *target_frame, struct stream_layer *layer, struct stream_state *state, int layer_i)
 {
