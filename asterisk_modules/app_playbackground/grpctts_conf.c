@@ -163,6 +163,17 @@ int grpctts_parse_buffer_size(struct grpctts_buffer_size *buffer_size, const cha
 
 	return 1;
 }
+int grpctts_parse_starvation_policy(const char *str)
+{
+	if (!strcmp(str, "wait"))
+		return GRPCTTS_STARVATION_POLICY_WAIT;
+	if (!strcmp(str, "dropout"))
+		return GRPCTTS_STARVATION_POLICY_DROPOUT;
+	if (!strcmp(str, "abandon"))
+		return GRPCTTS_STARVATION_POLICY_ABANDON;
+
+	return GRPCTTS_STARVATION_POLICY_UNSPECIFIED;
+}
 
 
 void grpctts_job_conf_init(struct grpctts_job_conf *conf)
@@ -174,6 +185,7 @@ void grpctts_job_conf_init(struct grpctts_job_conf *conf)
 	conf->voice_name = NULL;
 	conf->voice_gender = GRPCTTS_VOICE_GENDER_UNSPECIFIED;
 	conf->remote_frame_format = GRPCTTS_FRAME_FORMAT_SLINEAR16;
+	conf->starvation_policy = GRPCTTS_STARVATION_POLICY_WAIT;
 	conf->initial_buffer_size.fraction = 0.0;
 	conf->initial_buffer_size.seconds = 0.0;
 }
@@ -189,6 +201,7 @@ void grpctts_job_conf_clear(struct grpctts_job_conf *conf)
 	conf->voice_name = NULL;
 	conf->voice_gender = GRPCTTS_VOICE_GENDER_UNSPECIFIED;
 	conf->remote_frame_format = GRPCTTS_FRAME_FORMAT_SLINEAR16;
+	conf->starvation_policy = GRPCTTS_STARVATION_POLICY_WAIT;
 	conf->initial_buffer_size.fraction = 0.0;
 	conf->initial_buffer_size.seconds = 0.0;
 }
@@ -203,6 +216,7 @@ struct grpctts_job_conf *grpctts_job_conf_cpy(struct grpctts_job_conf *dest, con
 	dest->voice_name = ast_strdup(src->voice_name);
 	dest->voice_gender = src->voice_gender;
 	dest->remote_frame_format = src->remote_frame_format;
+	dest->starvation_policy = src->starvation_policy;
 	dest->initial_buffer_size = src->initial_buffer_size;
 	return dest;
 }
@@ -367,6 +381,14 @@ int grpctts_conf_load(struct grpctts_conf *conf, ast_mutex_t *mutex, const char 
 						conf->job_conf.initial_buffer_size = initial_buffer_size;
 					} else {
 						ast_log(LOG_ERROR, "PlayBackground: parse error at '%s': category '%s': invalid buffer size specification '%s' at line %d\n",
+							fname, cat, var->value, var->lineno);
+					}
+				} else if (!strcasecmp(var->name, "starvation_policy")) {
+					enum grpctts_starvation_policy starvation_policy = grpctts_parse_starvation_policy(var->value);
+					if (starvation_policy != GRPCTTS_STARVATION_POLICY_UNSPECIFIED) {
+						conf->job_conf.starvation_policy = starvation_policy;
+					} else {
+						ast_log(LOG_ERROR, "PlayBackground: parse error at '%s': category '%s': invalid starvation policy specification '%s' at line %d\n",
 							fname, cat, var->value, var->lineno);
 					}
 				} else {
