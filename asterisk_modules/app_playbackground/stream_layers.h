@@ -53,7 +53,9 @@ struct stream_source_synthesis {
 	struct grpctts_job *job;
 	struct ast_frame *buffered_frame;
 	int buffered_frame_off;
+	enum grpctts_starvation_policy starvation_policy;
 	struct grpctts_buffer_size initial_buffer_size;
+	size_t dropout_frames;
 	size_t initial_buffer_samples;
 	int initial_buffer_reached;
 	int duration_announced;
