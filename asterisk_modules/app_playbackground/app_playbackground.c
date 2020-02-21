@@ -460,11 +460,13 @@ static int unload_module(void)
 {
 	stream_layers_global_uninit();
 	grpctts_shutdown();
+	grpctts_conf_global_uninit();
 	return ast_unregister_application(app);
 }
 
 static int load_module(void)
 {
+	grpctts_conf_global_init();
 	grpctts_set_stream_error_callback(stream_error_callback);
 	grpctts_init();
 	stream_layers_global_init();
