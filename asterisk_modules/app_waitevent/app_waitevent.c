@@ -388,6 +388,12 @@ static inline int time_ge(const struct timespec *a, const struct timespec *b)
 		a->tv_sec > b->tv_sec ||
 		(a->tv_sec == b->tv_sec && a->tv_nsec >= b->tv_nsec);
 }
+static inline void read_out_fd(int fd)
+{
+	char buffer[4096];
+	while (read(fd, buffer, sizeof(buffer)) == sizeof(buffer))
+		/* NOOP */;
+}
 
 static int waitevent_exec(struct ast_channel *chan, const char *data)
 {
@@ -403,15 +409,14 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 
 	double timeout = strtod(data, NULL);
 	struct timespec deadline;
-	clock_gettime(CLOCK_REALTIME, &deadline);
-	if (timeout > 0.0) {
+	clock_gettime(CLOCK_MONOTONIC_RAW, &deadline);
+	if (timeout > 0.0)
 		add_time(&deadline, timeout);
-	}
 
 	struct user_message *entry;
 	while (!(entry = ht_user_message_queue_take_first(queue))) {
 		struct timespec current_time;
-		clock_gettime(CLOCK_REALTIME, &current_time);
+		clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
 		if (time_ge (&current_time, &deadline))
 			break;
 		struct timespec rel_timeout;
@@ -435,6 +440,7 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 					set_fail_status(chan, "HANGUP");
 					return 0;
 				}
+				read_out_fd(pollfds[1].fd);
 			}
 			if (pollfds[0].revents & POLLIN) {
 				eventfd_t value;

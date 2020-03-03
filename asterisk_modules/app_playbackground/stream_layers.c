@@ -981,7 +981,7 @@ static inline int stream_layer_stream_merged_frame(struct stream_layer *layers, 
 	struct ast_channel *chan = state->chan;
 
 	/* 1. Make zero frame */
-	struct ast_frame *frame = ast_frdup(&zero_frame);;
+	struct ast_frame *frame = ast_frdup(&zero_frame);
 	if (!frame) {
 		ast_log(AST_LOG_ERROR, "Failed to duplicate zero frame\n");
 		return -1;
