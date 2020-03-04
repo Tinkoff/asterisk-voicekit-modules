@@ -394,12 +394,15 @@ static inline void read_out_fd(int fd)
 	while (read(fd, buffer, sizeof(buffer)) == sizeof(buffer))
 		/* NOOP */;
 }
+static inline void read_out_frames(struct ast_channel *chan)
+{
+	int ms;
+	while (ms = 0, ast_waitfor_n(&chan, 1, &ms))
+		ast_frfree(ast_read(chan));
+}
 
 static int waitevent_exec(struct ast_channel *chan, const char *data)
 {
-	ast_autoservice_start(chan);
-	RAII_VAR(struct ast_channel *, chan_raii_var, chan, ast_autoservice_stop);
-
 	struct ht_user_message_queue *queue = get_channel_queue(chan);
 	if (!queue) {
 		ast_log(AST_LOG_WARNING, "No queue initialized for 'WaitEvent' command: use 'WaitEventInit()' to initialize queue!!");
@@ -413,6 +416,8 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 	if (timeout > 0.0)
 		add_time(&deadline, timeout);
 
+	read_out_frames(chan);
+
 	struct user_message *entry;
 	while (!(entry = ht_user_message_queue_take_first(queue))) {
 		struct timespec current_time;
@@ -421,7 +426,7 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 			break;
 		struct timespec rel_timeout;
 		time_set_sub(&rel_timeout, &deadline, &current_time);
-		struct pollfd pollfds[2] = {
+		struct pollfd pollfds[3] = {
 			{
 				.fd = queue->efd,
 				.events = POLLIN,
@@ -432,9 +437,14 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 				.events = POLLIN,
 				.revents = 0,
 			},
+			{
+				.fd = ast_channel_fd(chan, 0),
+				.events = POLLIN,
+				.revents = 0,
+			},
 		};
 
-		if (ppoll(pollfds, 2, &rel_timeout, NULL) > 0) {
+		if (ppoll(pollfds, 3, &rel_timeout, NULL) > 0) {
 			if (pollfds[1].revents & POLLIN) {
 				if (ast_check_hangup_locked(chan)) {
 					set_fail_status(chan, "HANGUP");
@@ -445,6 +455,9 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 			if (pollfds[0].revents & POLLIN) {
 				eventfd_t value;
 				eventfd_read(queue->efd, &value);
+			}
+			if (pollfds[2].revents & POLLIN) {
+				read_out_frames(chan);
 			}
 		}
 	}
