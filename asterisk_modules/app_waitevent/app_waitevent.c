@@ -394,12 +394,57 @@ static inline void read_out_fd(int fd)
 	while (read(fd, buffer, sizeof(buffer)) == sizeof(buffer))
 		/* NOOP */;
 }
+static inline void read_out_frames(struct ast_channel *chan)
+{
+	int ms;
+	while (ms = 0, ast_waitfor_n(&chan, 1, &ms))
+		ast_frfree(ast_read(chan));
+}
+/*
+  Waits for channel event or event on event_fd
+  Returns:
+  -1 on epoll error
+   0 on timeout
+   1 on channel events except hangup
+   2 on channel hangup
+ */
+static int wait_for_channel_and_event_fd(struct ast_channel *chan, int event_fd, const struct timespec *rel_timeout)
+{
+	struct pollfd pollfds[AST_MAX_FDS + 1];
+	size_t i;
+	for (i = 0; i < AST_MAX_FDS; ++i) {
+		pollfds[i].fd = ast_channel_fd(chan, i);
+		pollfds[i].events = ast_channel_fd_isset(chan, i) ? POLLIN : 0;
+		pollfds[i].revents = 0;
+			
+	}
+	{
+		pollfds[AST_MAX_FDS].fd = event_fd;
+		pollfds[AST_MAX_FDS].events = POLLIN;
+		pollfds[AST_MAX_FDS].revents = 0;
+	}
+
+	int ret = ppoll(pollfds, AST_MAX_FDS + 1, rel_timeout, NULL);
+	if (ret <= 0)
+		return ret;
+
+	if (pollfds[AST_MAX_FDS].revents & POLLIN) {
+		eventfd_t value;
+		eventfd_read(event_fd, &value);
+	}
+	if (pollfds[AST_ALERT_FD].revents & POLLIN) {
+		if (ast_check_hangup_locked(chan))
+			return 2;
+		return 1;
+	}
+	for (i = 0; i < AST_MAX_FDS; ++i)
+		if (pollfds[i].revents & POLLIN)
+			return 1;
+	return 0;
+}
 
 static int waitevent_exec(struct ast_channel *chan, const char *data)
 {
-	ast_autoservice_start(chan);
-	RAII_VAR(struct ast_channel *, chan_raii_var, chan, ast_autoservice_stop);
-
 	struct ht_user_message_queue *queue = get_channel_queue(chan);
 	if (!queue) {
 		ast_log(AST_LOG_WARNING, "No queue initialized for 'WaitEvent' command: use 'WaitEventInit()' to initialize queue!!");
@@ -413,6 +458,8 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 	if (timeout > 0.0)
 		add_time(&deadline, timeout);
 
+	read_out_frames(chan);
+
 	struct user_message *entry;
 	while (!(entry = ht_user_message_queue_take_first(queue))) {
 		struct timespec current_time;
@@ -421,31 +468,13 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 			break;
 		struct timespec rel_timeout;
 		time_set_sub(&rel_timeout, &deadline, &current_time);
-		struct pollfd pollfds[2] = {
-			{
-				.fd = queue->efd,
-				.events = POLLIN,
-				.revents = 0,
-			},
-			{
-				.fd = ast_channel_internal_alert_readfd(chan),
-				.events = POLLIN,
-				.revents = 0,
-			},
-		};
-
-		if (ppoll(pollfds, 2, &rel_timeout, NULL) > 0) {
-			if (pollfds[1].revents & POLLIN) {
-				if (ast_check_hangup_locked(chan)) {
-					set_fail_status(chan, "HANGUP");
-					return 0;
-				}
-				read_out_fd(pollfds[1].fd);
-			}
-			if (pollfds[0].revents & POLLIN) {
-				eventfd_t value;
-				eventfd_read(queue->efd, &value);
-			}
+		int ret = wait_for_channel_and_event_fd(chan, queue->efd, &rel_timeout);
+		if (ret == 2) {
+			set_fail_status(chan, "HANGUP");
+			return 0;
+		}
+		if (ret == 1) {
+			read_out_frames(chan);
 		}
 	}
 
