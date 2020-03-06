@@ -284,12 +284,19 @@ static int user_event_hook_cb(int category, const char *event, char *body)
 			body += sizeof("\r\n") - sizeof("");
 		}
 	}
-	if (!eventbody || !eventname || !chan || !queue)
+	if (!eventname || !chan || !queue)
 		return 0;
 
-	*eventname_e = *eventbody_e = '\0';
-	struct ast_json *blob = ast_json_pack("{s: {s: s, s: s}}", "userevent", "eventname", eventname, "eventbody", eventbody);
-	*eventname_e = *eventbody_e = '\r';
+	*eventname_e = '\0';
+	if (eventbody_e)
+		*eventbody_e = '\0';
+	struct ast_json *blob =
+		eventbody ?
+		ast_json_pack("{s: {s: s, s: s}}", "userevent", "eventname", eventname, "eventbody", eventbody) :
+		ast_json_pack("{s: {s: s}}", "userevent", "eventname", eventname);
+	*eventname_e = '\r';
+	if (eventbody_e)
+		*eventbody_e = '\r';
 
 	struct user_message *entry = make_user_message(blob);
 	ast_mutex_lock(&queue->mutex);
