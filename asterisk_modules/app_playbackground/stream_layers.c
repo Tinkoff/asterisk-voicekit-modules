@@ -169,6 +169,24 @@ static void push_playbackground_streaming_started_event(struct ast_channel *chan
 
 	ast_json_unref(blob);
 }
+static void push_playbackground_custom_event(struct ast_channel *chan, int layer_i, const char *event)
+{
+	size_t event_len = strlen(event);
+	char *data = ast_malloc(event_len + 64);
+	if (!data)
+		return;
+	sprintf(data, "%d,%s", layer_i, event);
+	struct ast_json *blob = ast_json_pack("{s: s, s: s}", "eventname", "PlayBackgroundEvent", "eventbody", data);
+	free(data);
+	if (!blob)
+		return;
+
+	ast_channel_lock(chan);
+	ast_multi_object_blob_single_channel_publish(chan, ast_multi_user_event_type(), blob);
+	ast_channel_unlock(chan);
+
+	ast_json_unref(blob);
+}
 
 
 static inline int parse_floating_timespec(struct timespec *ts, const char *source)
@@ -592,6 +610,14 @@ static int parse_sleep_args(struct timespec *timeout, const char *arg)
 	}
 	return parse_floating_timespec(timeout, arg + 1);
 }
+static const char *parse_event_args(const char *arg)
+{
+	if (*arg != ',') {
+		ast_log(AST_LOG_ERROR, "PlayBackground: failed to parse sleep arguments '%s': expected 3 arguments\n", arg);
+		return NULL;
+	}
+	return arg + 1;
+}
 static int parse_say_args(struct grpctts_job_conf *conf, struct grpctts_job_input *input, struct parse_say_input_state *parse_state, char *arg)
 {
 	char *arg_sep = find_non_escaped_comma(arg);
@@ -755,6 +781,15 @@ static inline int stream_layer_check_jobs(struct stream_layer *layer, struct str
 			stream_source_start_synthesis(&layer->source, state, &job_conf, &job_input);
 			parse_say_input_state_free(&parse_state);
 			grpctts_job_conf_clear(&job_conf);
+		} else if (!strcmp(command, "event")) {
+			char *arg = sep + 1;
+			const char *event = parse_event_args(arg);
+			if (!event) {
+				snprintf(error_message, error_message_len, "Invalid event arguments '%s' specified", arg);
+				ast_free(job);
+				return -1;
+			}
+			push_playbackground_custom_event(state->chan, layer_i, event);
 		} else {
 			*sep = ',';
 			snprintf(error_message, error_message_len, "Unsupported command '%s'", command);
