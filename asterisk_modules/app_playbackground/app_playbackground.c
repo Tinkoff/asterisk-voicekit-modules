@@ -100,6 +100,7 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 			for OPTIONS ',', ':', '(' and ')' characters must be backslash-escaped, INPUT must NOT be escaped</para>
 			<para>When playback is finished at each layer empty frames are NOT being sent.</para>
 			<para><emphasis>At each playback begin an &quot;PlayBackgroundDuration(LAYER_N,DURATION_SECS)&quot; event is generated.</emphasis></para>
+			<para><emphasis>At each playback actual streaming begin (after initial buffer size was reached) an &quot;PlayBackgroundStreamingStarted(LAYER_N)&quot; event is generated.</emphasis></para>
 			<para><emphasis>At each playback end an &quot;PlayBackgroundFinished(LAYER_N)&quot; event is generated.</emphasis></para>
 			<para><emphasis>At each playback error an &quot;PlayBackgroundError(LAYER_N)&quot; event is generated and remaining commands are dropped.</emphasis></para>
 			<para><emphasis>Note that invocation with empty arguments will stop current playback.</emphasis></para>

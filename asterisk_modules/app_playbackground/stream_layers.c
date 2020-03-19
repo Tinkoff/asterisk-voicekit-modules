@@ -155,6 +155,20 @@ static void push_playbackground_duration_event(struct ast_channel *chan, int lay
 
 	ast_json_unref(blob);
 }
+static void push_playbackground_streaming_started_event(struct ast_channel *chan, int layer_i)
+{
+	char data[64];
+	snprintf(data, sizeof(data), "%d", layer_i);
+	struct ast_json *blob = ast_json_pack("{s: s, s: s}", "eventname", "PlayBackgroundStreamingStarted", "eventbody", data);
+	if (!blob)
+		return;
+
+	ast_channel_lock(chan);
+	ast_multi_object_blob_single_channel_publish(chan, ast_multi_user_event_type(), blob);
+	ast_channel_unlock(chan);
+
+	ast_json_unref(blob);
+}
 
 
 static inline int parse_floating_timespec(struct timespec *ts, const char *source)
@@ -416,7 +430,7 @@ static inline int stream_source_synthesis_eos(struct stream_source *source)
 {
 	return grpctts_job_termination_called(source->source.synthesis.job);
 }
-static inline int stream_source_synthesis_buffer_frame(struct stream_source *source)
+static inline int stream_source_synthesis_buffer_frame(struct stream_source *source, int layer_i)
 {
 	grpctts_job_collect(source->source.synthesis.job);
 	size_t sample_count = grpctts_job_buffer_size(source->source.synthesis.job) >> 1;
@@ -426,6 +440,8 @@ static inline int stream_source_synthesis_buffer_frame(struct stream_source *sou
 			if (!grpctts_job_termination_called(source->source.synthesis.job))
 				return 0;
 		}
+		if (!source->source.synthesis.initial_buffer_reached)
+			push_playbackground_streaming_started_event(source->source.synthesis.chan, layer_i);
 		source->source.synthesis.initial_buffer_reached = 1;
 		struct ast_frame *fr = alloc_frame(sample_count);
 		if (!fr) {
@@ -708,6 +724,7 @@ static inline int stream_layer_check_jobs(struct stream_layer *layer, struct str
 				return -1;
 			}
 			push_playbackground_duration_event(state->chan, layer_i, duration);
+			push_playbackground_streaming_started_event(state->chan, layer_i);
 		} else if (!strcmp(command, "sleep")) {
 			const char *arg = sep + 1;
 			struct timespec timeout;
@@ -720,6 +737,7 @@ static inline int stream_layer_check_jobs(struct stream_layer *layer, struct str
 			stream_source_start_sleep(&layer->source, &timeout);
 
 			push_playbackground_duration_event(state->chan, layer_i, timeout.tv_sec + timeout.tv_nsec*0.000000001);
+			push_playbackground_streaming_started_event(state->chan, layer_i);
 		} else if (!strcmp(command, "say")) {
 			char *arg = sep + 1;
 			struct grpctts_job_conf job_conf;
@@ -847,11 +865,11 @@ static int merge_fill_source_synthesis(struct stream_source *source, short **tar
 	}
 	return 0;
 }	
-static inline int merge_source_synthesis(struct stream_source *source, short **target_data, int *samples_to_merge)
+static inline int merge_source_synthesis(struct stream_source *source, int layer_i, short **target_data, int *samples_to_merge)
 {
 	struct stream_source_synthesis *synthesis = &source->source.synthesis;
 	if (!synthesis->buffered_frame) {
-		if (stream_source_synthesis_buffer_frame(source) == -1) {
+		if (stream_source_synthesis_buffer_frame(source, layer_i) == -1) {
 			stream_source_stop(source);
 			return -1;
 		}
@@ -881,7 +899,7 @@ static inline int merge_source_synthesis(struct stream_source *source, short **t
 		ast_frfree(synthesis->buffered_frame);
 		synthesis->buffered_frame = NULL;
 		if (*samples_to_merge) {
-			if (stream_source_synthesis_buffer_frame(source) == -1) {
+			if (stream_source_synthesis_buffer_frame(source, layer_i) == -1) {
 				stream_source_stop(source);
 				return -1;
 			}
@@ -961,7 +979,7 @@ static inline void stream_layer_merge_frame(struct ast_frame *target_frame, stru
 				if (source->source.synthesis.initial_buffer_samples < 0)
 					source->source.synthesis.initial_buffer_samples = 0;
 			}
-			int ret = merge_source_synthesis(source, &target_data, &samples_to_merge);
+			int ret = merge_source_synthesis(source, layer_i, &target_data, &samples_to_merge);
 			if (ret == -1) {
 				stream_layer_drop_jobs(layer);
 				push_playbackground_error_event(state->chan, layer_i, "Failed to stream synthesis task");
