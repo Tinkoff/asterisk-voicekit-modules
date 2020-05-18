@@ -55,10 +55,40 @@ extern "C" {
 // 7 days
 #define EXPIRATION_PERIOD (7*86400)
 
+#define INTERNAL_SAMPLE_RATE 8000
+#define MAX_FRAME_DURATION_MSEC 100
+#define MAX_FRAME_SAMPLES 800
+#define ALIGNMENT_SAMPLES 80
+
 
 static const std::string grpc_roots_pem_string ((const char *) grpc_roots_pem, sizeof(grpc_roots_pem));
 
 
+static inline int delta_samples(const struct timespec *a, const struct timespec *b)
+{
+	struct timespec delta;
+	delta.tv_sec = a->tv_sec - b->tv_sec;
+	delta.tv_nsec = a->tv_nsec - b->tv_nsec;
+	if (delta.tv_nsec < 0) {
+		delta.tv_sec--;
+		delta.tv_nsec += 1000000000;
+	}
+	
+	return delta.tv_sec*INTERNAL_SAMPLE_RATE + ((int64_t) delta.tv_nsec)*INTERNAL_SAMPLE_RATE/1000000000;
+}
+static inline void time_add_samples(struct timespec *t, int samples)
+{
+	t->tv_sec += samples/INTERNAL_SAMPLE_RATE;
+	t->tv_nsec += ((int64_t) (samples%INTERNAL_SAMPLE_RATE))*1000000000/INTERNAL_SAMPLE_RATE;
+	if (t->tv_nsec >= 1000000000) {
+		t->tv_sec++;
+		t->tv_nsec -= 1000000000;
+	}
+}
+static inline int aligned_samples(int samples)
+{
+	return (samples + ALIGNMENT_SAMPLES/2)/ALIGNMENT_SAMPLES*ALIGNMENT_SAMPLES;
+}
 static inline void eventfd_skip(int fd)
 {
 	eventfd_t value;
@@ -392,8 +422,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 					default:
 						recognition_config->set_encoding(tinkoff::cloud::stt::v1::ALAW);
 					}
-					recognition_config->set_sample_rate_hertz(8000);
-					recognition_config->set_max_alternatives(1);
+					recognition_config->set_sample_rate_hertz(INTERNAL_SAMPLE_RATE);
 					recognition_config->set_num_channels(1);
 					if (language_code.size())
 						recognition_config->set_language_code(language_code);
@@ -419,6 +448,8 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 
 			bool stream_valid = true;
 			bool warned = false;
+			struct timespec last_frame_moment;
+			clock_gettime(CLOCK_MONOTONIC_RAW, &last_frame_moment);
 			while (stream_valid && !ast_check_hangup_locked(chan)) {
 				struct pollfd pfds[2] = {
 					{
@@ -432,16 +463,29 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 						.revents = 0,
 					},
 				};
-				poll(pfds, 2, 1000);
+				poll(pfds, 2, MAX_FRAME_DURATION_MSEC*2);
 				if (pfds[0].revents & POLLIN)
 					break;
 
-				if (!(pfds[1].revents & POLLIN))
+				if (!(pfds[1].revents & POLLIN)) {
+					struct timespec current_moment;
+					clock_gettime(CLOCK_MONOTONIC_RAW, &current_moment);
+					int gap_samples = aligned_samples(delta_samples(&current_moment, &last_frame_moment) - MAX_FRAME_SAMPLES);
+					if (gap_samples > 0) {
+						tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
+						std::vector<uint8_t> buffer(gap_samples*2);
+						request.set_audio_content(buffer.data(), buffer.size());
+						if (!stream->Write(request))
+							stream_valid = false;
+						time_add_samples(&last_frame_moment, gap_samples);
+					}
 					continue;
+				}
 
 				eventfd_skip(frame_event_fd);
 
-				while (1) {
+				bool gap_handled = false;
+				while (stream_valid) {
 					AST_LIST_LOCK(&audio_frames);
 					struct ast_frame *f = AST_LIST_REMOVE_HEAD(&audio_frames, frame_list);
 					AST_LIST_UNLOCK(&audio_frames);
@@ -449,6 +493,21 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 						break;
 
 					if (f->frametype == AST_FRAME_VOICE) {
+						struct timespec current_moment;
+						clock_gettime(CLOCK_MONOTONIC_RAW, &current_moment);
+						if (!gap_handled) {
+							int gap_samples = aligned_samples(delta_samples(&current_moment, &last_frame_moment) - f->samples);
+							if (gap_samples > 0) {
+								tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
+								std::vector<uint8_t> buffer(gap_samples*2);
+								request.set_audio_content(buffer.data(), buffer.size());
+								if (!stream->Write(request))
+									stream_valid = false;
+								time_add_samples(&last_frame_moment, gap_samples);
+							}
+							gap_handled = true;
+						}
+
 						tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
 						std::vector<uint8_t> buffer;
 						size_t len = 0;
@@ -461,6 +520,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 					}
 
 					ast_frfree(f);
+					clock_gettime(CLOCK_MONOTONIC_RAW, &last_frame_moment);
 				}
 			}
 

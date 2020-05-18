@@ -177,7 +177,7 @@ static void push_playbackground_custom_event(struct ast_channel *chan, int layer
 		return;
 	sprintf(data, "%d,%s", layer_i, event);
 	struct ast_json *blob = ast_json_pack("{s: s, s: s}", "eventname", "PlayBackgroundEvent", "eventbody", data);
-	free(data);
+	ast_free(data);
 	if (!blob)
 		return;
 
