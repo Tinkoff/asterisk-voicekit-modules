@@ -405,7 +405,7 @@ static inline void read_out_frames(struct ast_channel *chan)
 {
 	int ms;
 	while (ms = 0, ast_waitfor_n(&chan, 1, &ms))
-		ast_frfree(ast_read(chan));
+		ast_frame_dtor(ast_read(chan));
 }
 /*
   Waits for channel event or event on event_fd

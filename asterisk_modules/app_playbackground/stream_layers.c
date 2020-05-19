@@ -214,12 +214,12 @@ static inline struct ast_frame *read_frame(struct ast_filestream *s, int *whenne
 	}
 
 	if (!(new_fr = ast_frisolate(fr))) {
-		ast_frfree(fr);
+		ast_frame_dtor(fr);
 		return NULL;
 	}
 
 	if (new_fr != fr) {
-		ast_frfree(fr);
+		ast_frame_dtor(fr);
 		fr = new_fr;
 	}
 
@@ -467,7 +467,7 @@ static inline int stream_source_synthesis_buffer_frame(struct stream_source *sou
 			return -1;
 		}
 		if (!grpctts_job_take_block(source->source.synthesis.job, sample_count*sizeof(int16_t), fr->data.ptr)) {
-			ast_frfree(fr);
+			ast_frame_dtor(fr);
 			ast_log(LOG_ERROR, "PlayBackground() failed: memory allocation error\n");
 			return -1;
 		}
@@ -864,7 +864,7 @@ static inline int merge_source_file(struct stream_source *source, short **target
 		}
 	}
 	if (file->buffered_frame_off == sample_count) {
-		ast_frfree(file->buffered_frame);
+		ast_frame_dtor(file->buffered_frame);
 		file->buffered_frame = NULL;
 	}
 	return 1;
@@ -931,7 +931,7 @@ static inline int merge_source_synthesis(struct stream_source *source, int layer
 		return 1;
 	int sample_count = synthesis->buffered_frame->samples;
 	if (synthesis->buffered_frame_off == sample_count) {
-		ast_frfree(synthesis->buffered_frame);
+		ast_frame_dtor(synthesis->buffered_frame);
 		synthesis->buffered_frame = NULL;
 		if (*samples_to_merge) {
 			if (stream_source_synthesis_buffer_frame(source, layer_i) == -1) {

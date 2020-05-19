@@ -366,7 +366,7 @@ GRPCSTT::~GRPCSTT()
 	AST_LIST_LOCK(&audio_frames);
 	struct ast_frame *f;
 	while ((f = AST_LIST_REMOVE_HEAD(&audio_frames, frame_list)))
-		ast_frfree(f);
+		ast_frame_dtor(f);
 	AST_LIST_UNLOCK(&audio_frames);
 }
 void GRPCSTT::ReapAudioFrame(struct ast_frame *frame)
@@ -519,7 +519,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 						}
 					}
 
-					ast_frfree(f);
+					ast_frame_dtor(f);
 					clock_gettime(CLOCK_MONOTONIC_RAW, &last_frame_moment);
 				}
 			}
