@@ -280,7 +280,7 @@ public:
 		bool interim_results_enable, double interim_results_interval);
 	~GRPCSTT();
 	void ReapAudioFrame(struct ast_frame *frame);
-	void Terminate();
+	void Terminate() noexcept;
 	bool Run(int &error_status, std::string &error_message);
 
 private:
@@ -381,7 +381,7 @@ void GRPCSTT::ReapAudioFrame(struct ast_frame *frame)
 
 	eventfd_write(frame_event_fd, 1);
 }
-void GRPCSTT::Terminate()
+void GRPCSTT::Terminate() noexcept
 {
 	eventfd_write(terminate_event_fd, 1);
 }
@@ -528,17 +528,31 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 		}
 	);
 
-	stream->WaitForInitialMetadata();
-	const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
-	std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
-	push_grpcstt_x_request_id_event(chan, (x_request_id_it != metadata.end()) ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "");
+	try {
+		stream->WaitForInitialMetadata();
+		const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
+		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
+		push_grpcstt_x_request_id_event(chan, (x_request_id_it != metadata.end()) ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "");
 
-	tinkoff::cloud::stt::v1::StreamingRecognizeResponse response;
-	while (stream->Read(&response)) {
-		for (const tinkoff::cloud::stt::v1::StreamingRecognitionResult &stream_result: response.results()) {
-			push_grpcstt_event(chan, build_grpcstt_event(stream_result, false), false);
-			push_grpcstt_event(chan, build_grpcstt_event(stream_result, true), true);
+		tinkoff::cloud::stt::v1::StreamingRecognizeResponse response;
+		while (stream->Read(&response)) {
+			for (const tinkoff::cloud::stt::v1::StreamingRecognitionResult &stream_result: response.results()) {
+				push_grpcstt_event(chan, build_grpcstt_event(stream_result, false), false);
+				push_grpcstt_event(chan, build_grpcstt_event(stream_result, true), true);
+			}
 		}
+	} catch (const std::exception &ex) {
+		Terminate();
+		writer.join();
+		error_status = -1;
+		error_message = std::string("GRPC STT finished with error: ") + ex.what();
+		return false;
+	} catch (...) {
+		Terminate();
+		writer.join();
+		error_status = -1;
+		error_message = "GRPC STT finished with unknown error";
+		return false;
 	}
 	Terminate();
 	writer.join();
