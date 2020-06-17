@@ -232,7 +232,7 @@ static inline struct ast_frame *alloc_frame(size_t sample_count)
 	if (!fr)
 		return NULL;
 	if (!(fr->data.ptr = ast_malloc(byte_count))) {
-		ast_free(fr);
+		ast_frame_dtor(fr);
 		return NULL;
 	}
 	fr->frametype = AST_FRAME_VOICE;
@@ -1078,7 +1078,7 @@ static inline int stream_layer_stream_merged_frame(struct stream_layer *layers, 
 	if (state->next_frame_time.tv_sec != -1) {
 		int ret = wait_for_deadline(&state->next_frame_time, state->efd);
 		if (ret) {
-			ast_free(frame);
+			ast_frame_dtor(frame);
 			return ret;
 		}
 	}
@@ -1086,7 +1086,7 @@ static inline int stream_layer_stream_merged_frame(struct stream_layer *layers, 
 	/* 4. Write frame */
 	if (have_busy_layers_before)
 		ast_write(chan, frame);
-	ast_free(frame);
+	ast_frame_dtor(frame);
 	if (!have_busy_layers_after)
 		check_stop_void_generator(chan);
 
