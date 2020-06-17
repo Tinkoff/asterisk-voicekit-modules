@@ -236,7 +236,7 @@ static inline struct ast_frame *alloc_frame(size_t sample_count)
 		return NULL;
 	}
 	fr->frametype = AST_FRAME_VOICE;
-	ao2_ref(fr->subclass.format = ast_format_slin, 1);
+	ast_log(AST_LOG_DEBUG, "Ref count at \"alloc_frame()\": %d\n", ao2_ref(fr->subclass.format = ast_format_slin, 1));
 	fr->datalen = byte_count;
 	fr->samples = sample_count;
 	fr->mallocd = AST_MALLOCD_HDR | AST_MALLOCD_DATA;
