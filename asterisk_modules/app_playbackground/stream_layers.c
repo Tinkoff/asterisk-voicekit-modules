@@ -55,6 +55,8 @@ static void *monitor_slin_format_refs(void *ud)
 {
 	while (1) {
 		ast_log(AST_LOG_DEBUG, "Ref count for ast_format_slin: %d\n", ao2_ref(ast_format_slin, 0));
+		ast_log(AST_LOG_DEBUG, "Ref count for ast_format_alaw: %d\n", ao2_ref(ast_format_alaw, 0));
+		ast_log(AST_LOG_DEBUG, "Ref count for ast_format_ulaw: %d\n", ao2_ref(ast_format_ulaw, 0));
 		sleep(1);
 	}
 	return NULL;
