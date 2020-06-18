@@ -268,6 +268,7 @@ class GRPCSTT
 {
 public:
 	static void AttachToChannel(std::shared_ptr<GRPCSTT> &grpc_stt);
+	static void DetachFromChannel(std::shared_ptr<GRPCSTT> &grpc_stt) noexcept;
 
 public:
 	GRPCSTT(int terminate_event_fd, std::shared_ptr<grpc::Channel> grpc_channel,
@@ -337,8 +338,19 @@ void GRPCSTT::AttachToChannel(std::shared_ptr<GRPCSTT> &grpc_stt)
 	interface.destroy_cb = framehook_destroy_callback;
 	interface.data = (void*) new std::shared_ptr<GRPCSTT>(grpc_stt);
 	ast_channel_lock(grpc_stt->chan);
-	ast_framehook_attach(grpc_stt->chan, &interface);
+	int id = ast_framehook_attach(grpc_stt->chan, &interface);
 	ast_channel_unlock(grpc_stt->chan);
+	grpc_stt->framehook_id = id;
+}
+void GRPCSTT::DetachFromChannel(std::shared_ptr<GRPCSTT> &grpc_stt) noexcept
+{
+	int id = grpc_stt->framehook_id;
+	if (id == -1)
+		return;
+	ast_channel_lock(grpc_stt->chan);
+	ast_framehook_detach(grpc_stt->chan, id);
+	ast_channel_unlock(grpc_stt->chan);
+	grpc_stt->framehook_id = -1;
 }
 GRPCSTT::GRPCSTT(int terminate_event_fd, std::shared_ptr<grpc::Channel> grpc_channel,
 		 const char *authorization_api_key, const char *authorization_secret_key,
@@ -350,7 +362,7 @@ GRPCSTT::GRPCSTT(int terminate_event_fd, std::shared_ptr<grpc::Channel> grpc_cha
 	: terminate_event_fd(terminate_event_fd), stt_stub(tinkoff::cloud::stt::v1::SpeechToText::NewStub(grpc_channel)),
 	authorization_api_key(authorization_api_key), authorization_secret_key(authorization_secret_key),
 	authorization_issuer(authorization_issuer), authorization_subject(authorization_subject), authorization_audience(authorization_audience),
-	chan(chan), language_code(language_code), max_alternatives(max_alternatives), frame_format(frame_format),
+	chan(chan), language_code(language_code), max_alternatives(max_alternatives), frame_format(frame_format), framehook_id(-1),
 	vad_disable(vad_disable), vad_min_speech_duration(vad_min_speech_duration), vad_max_speech_duration(vad_max_speech_duration),
 	vad_silence_duration_threshold(vad_silence_duration_threshold), vad_silence_prob_threshold(vad_silence_prob_threshold), vad_aggressiveness(vad_aggressiveness),
 	interim_results_enable(interim_results_enable), interim_results_interval(interim_results_interval)
@@ -594,7 +606,13 @@ extern "C" void grpc_stt_run(int terminate_event_fd, const char *endpoint, const
 		);
 #undef NON_NULL_STRING
 		GRPCSTT::AttachToChannel(grpc_stt);
-		success = grpc_stt->Run(error_status, error_message);
+		try {
+			success = grpc_stt->Run(error_status, error_message);
+			GRPCSTT::DetachFromChannel(grpc_stt);
+		} catch (...) {
+			GRPCSTT::DetachFromChannel(grpc_stt);
+			throw;
+		}
 	} catch (const std::exception &ex) {
 		error_status = -1;
 		error_message = std::string("GRPCSTTBackgrond background thread finished with exception: ") + ex.what();
