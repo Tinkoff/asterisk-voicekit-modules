@@ -51,10 +51,23 @@ static struct ast_frame zero_frame = {
 };
 
 
+static void *monitor_slin_format_refs(void *ud)
+{
+	while (1) {
+		ast_log(AST_LOG_DEBUG, "Ref count for ast_format_slin: %d\n", ao2_ref(ast_format_slin, 0));
+		sleep(1);
+	}
+	return NULL;
+}
+
+
 void stream_layers_global_init()
 {
 	ao2_ref(ast_format_slin, 1);
 	zero_frame.subclass.format = ast_format_slin;
+
+	pthread_t thread;
+	ast_pthread_create_detached_background(&thread, NULL, monitor_slin_format_refs, NULL);
 }
 void stream_layers_global_uninit()
 {
