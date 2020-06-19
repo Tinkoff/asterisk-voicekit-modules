@@ -1,6 +1,6 @@
---- grpc/Makefile.orig	2018-07-13 12:47:56.022264799 +0300
-+++ grpc/Makefile	2018-07-13 12:47:53.553286883 +0300
-@@ -1346,7 +1346,7 @@
+--- grpc/Makefile.orig	2020-02-28 11:33:31.935472607 +0300
++++ grpc/Makefile	2020-06-19 13:02:34.497509856 +0300
+@@ -1379,7 +1379,7 @@
  $(LIBDIR)/$(CONFIG)/protobuf/libprotobuf.a: third_party/protobuf/configure
  	$(E) "[MAKE]    Building protobuf"
  	$(Q)mkdir -p $(LIBDIR)/$(CONFIG)/protobuf
@@ -9,3 +9,21 @@
  	$(Q)$(MAKE) -C third_party/protobuf clean
  	$(Q)$(MAKE) -C third_party/protobuf
  	$(Q)mkdir -p $(BINDIR)/$(CONFIG)/protobuf
+@@ -2951,7 +2951,7 @@
+ 
+ install-static: install-static_c install-static_cxx
+ 
+-install-static_c: static_c strip-static_c install-pkg-config_c
++install-static_c: static_c install-pkg-config_c
+ 	$(E) "[INSTALL] Installing libaddress_sorting.a"
+ 	$(Q) $(INSTALL) -d $(prefix)/lib
+ 	$(Q) $(INSTALL) $(LIBDIR)/$(CONFIG)/libaddress_sorting.a $(prefix)/lib/libaddress_sorting.a
+@@ -2968,7 +2968,7 @@
+ 	$(Q) $(INSTALL) -d $(prefix)/lib
+ 	$(Q) $(INSTALL) $(LIBDIR)/$(CONFIG)/libgrpc_unsecure.a $(prefix)/lib/libgrpc_unsecure.a
+ 
+-install-static_cxx: static_cxx strip-static_cxx install-pkg-config_cxx
++install-static_cxx: static_cxx install-pkg-config_cxx
+ 	$(E) "[INSTALL] Installing libgrpc++.a"
+ 	$(Q) $(INSTALL) -d $(prefix)/lib
+ 	$(Q) $(INSTALL) $(LIBDIR)/$(CONFIG)/libgrpc++.a $(prefix)/lib/libgrpc++.a
