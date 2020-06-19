@@ -1,6 +1,6 @@
---- grpc/Makefile.orig	2018-07-13 12:47:56.022264799 +0300
-+++ grpc/Makefile	2018-07-13 12:47:53.553286883 +0300
-@@ -1346,7 +1346,7 @@
+--- grpc/Makefile.orig	2020-02-28 11:33:31.935472607 +0300
++++ grpc/Makefile	2020-07-01 13:14:33.036418044 +0300
+@@ -1379,7 +1379,7 @@
  $(LIBDIR)/$(CONFIG)/protobuf/libprotobuf.a: third_party/protobuf/configure
  	$(E) "[MAKE]    Building protobuf"
  	$(Q)mkdir -p $(LIBDIR)/$(CONFIG)/protobuf
@@ -9,3 +9,38 @@
  	$(Q)$(MAKE) -C third_party/protobuf clean
  	$(Q)$(MAKE) -C third_party/protobuf
  	$(Q)mkdir -p $(BINDIR)/$(CONFIG)/protobuf
+@@ -2463,34 +2463,8 @@
+ # This prevents proper debugging after running make install.
+ 
+ strip-static_c: static_c
+-ifeq ($(CONFIG),opt)
+-	$(E) "[STRIP]   Stripping libaddress_sorting.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libaddress_sorting.a
+-	$(E) "[STRIP]   Stripping libgpr.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgpr.a
+-	$(E) "[STRIP]   Stripping libgrpc.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpc.a
+-	$(E) "[STRIP]   Stripping libgrpc_cronet.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpc_cronet.a
+-	$(E) "[STRIP]   Stripping libgrpc_unsecure.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpc_unsecure.a
+-endif
+ 
+ strip-static_cxx: static_cxx
+-ifeq ($(CONFIG),opt)
+-	$(E) "[STRIP]   Stripping libgrpc++.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpc++.a
+-	$(E) "[STRIP]   Stripping libgrpc++_cronet.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpc++_cronet.a
+-	$(E) "[STRIP]   Stripping libgrpc++_error_details.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpc++_error_details.a
+-	$(E) "[STRIP]   Stripping libgrpc++_reflection.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpc++_reflection.a
+-	$(E) "[STRIP]   Stripping libgrpc++_unsecure.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpc++_unsecure.a
+-	$(E) "[STRIP]   Stripping libgrpcpp_channelz.a"
+-	$(Q) $(STRIP) $(LIBDIR)/$(CONFIG)/libgrpcpp_channelz.a
+-endif
+ 
+ strip-shared_c: shared_c
+ ifeq ($(CONFIG),opt)
