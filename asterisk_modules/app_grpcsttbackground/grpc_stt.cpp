@@ -260,6 +260,17 @@ static const char *get_frame_samples(struct ast_frame *f, enum grpc_stt_frame_fo
 
 	return data;
 }
+static std::vector<uint8_t> make_silence_samples(enum grpc_stt_frame_format frame_format, size_t samples)
+{
+	switch (frame_format) {
+	case GRPC_STT_FRAME_FORMAT_SLINEAR16:
+		return std::vector<uint8_t>(samples*sizeof(int16_t), 0);
+	case GRPC_STT_FRAME_FORMAT_MULAW:
+		return std::vector<uint8_t>(samples, 0x7F /* SLINEAR16 (0) */);
+	default: /* GRPC_STT_FRAME_FORMAT_ALAW */
+		return std::vector<uint8_t>(samples, 0xD5 /* SLINEAR16 (8) */);
+	}
+}
 
 
 AST_LIST_HEAD(grpcstt_frame_list, ast_frame);
@@ -416,6 +427,24 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 
 	std::shared_ptr<grpc::ClientReaderWriter<tinkoff::cloud::stt::v1::StreamingRecognizeRequest,
 						 tinkoff::cloud::stt::v1::StreamingRecognizeResponse>> stream(stt_stub->StreamingRecognize(&context));
+
+	try {
+		stream->WaitForInitialMetadata();
+		const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
+		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
+		push_grpcstt_x_request_id_event(chan, (x_request_id_it != metadata.end()) ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "");
+	} catch (const std::exception &ex) {
+		Terminate();
+		error_status = -1;
+		error_message = std::string("GRPC STT finished with error: ") + ex.what();
+		return false;
+	} catch (...) {
+		Terminate();
+		error_status = -1;
+		error_message = "GRPC STT finished with unknown error";
+		return false;
+	}
+
 	std::thread writer(
 		[stream, this]()
 		{
@@ -485,7 +514,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 					int gap_samples = aligned_samples(delta_samples(&current_moment, &last_frame_moment) - MAX_FRAME_SAMPLES);
 					if (gap_samples > 0) {
 						tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
-						std::vector<uint8_t> buffer(gap_samples*2);
+						std::vector<uint8_t> buffer = make_silence_samples(frame_format, gap_samples);
 						request.set_audio_content(buffer.data(), buffer.size());
 						if (!stream->Write(request))
 							stream_valid = false;
@@ -511,7 +540,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 							int gap_samples = aligned_samples(delta_samples(&current_moment, &last_frame_moment) - f->samples);
 							if (gap_samples > 0) {
 								tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
-								std::vector<uint8_t> buffer(gap_samples*2);
+								std::vector<uint8_t> buffer = make_silence_samples(frame_format, gap_samples);
 								request.set_audio_content(buffer.data(), buffer.size());
 								if (!stream->Write(request))
 									stream_valid = false;
@@ -525,6 +554,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 						size_t len = 0;
 						const char *data = get_frame_samples(f, frame_format, buffer, &len, &warned);
 						if (data) {
+							time_add_samples(&last_frame_moment, f->samples);
 							request.set_audio_content(data, len);
 							if (!stream->Write(request))
 								stream_valid = false;
@@ -532,7 +562,6 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 					}
 
 					ast_frame_dtor(f);
-					clock_gettime(CLOCK_MONOTONIC_RAW, &last_frame_moment);
 				}
 			}
 
@@ -541,11 +570,6 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 	);
 
 	try {
-		stream->WaitForInitialMetadata();
-		const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
-		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
-		push_grpcstt_x_request_id_event(chan, (x_request_id_it != metadata.end()) ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "");
-
 		tinkoff::cloud::stt::v1::StreamingRecognizeResponse response;
 		while (stream->Read(&response)) {
 			for (const tinkoff::cloud::stt::v1::StreamingRecognitionResult &stream_result: response.results()) {
