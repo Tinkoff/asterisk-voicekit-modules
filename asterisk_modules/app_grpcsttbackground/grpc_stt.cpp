@@ -260,6 +260,17 @@ static const char *get_frame_samples(struct ast_frame *f, enum grpc_stt_frame_fo
 
 	return data;
 }
+static std::vector<uint8_t> make_silence_samples(enum grpc_stt_frame_format frame_format, size_t samples)
+{
+	switch (frame_format) {
+	case GRPC_STT_FRAME_FORMAT_SLINEAR16:
+		return std::vector<uint8_t>(samples*sizeof(int16_t), 0);
+	case GRPC_STT_FRAME_FORMAT_MULAW:
+		return std::vector<uint8_t>(samples, 0x7F /* SLINEAR16 (0) */);
+	default: /* GRPC_STT_FRAME_FORMAT_ALAW */
+		return std::vector<uint8_t>(samples, 0xD5 /* SLINEAR16 (8) */);
+	}
+}
 
 
 AST_LIST_HEAD(grpcstt_frame_list, ast_frame);
@@ -416,48 +427,71 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 
 	std::shared_ptr<grpc::ClientReaderWriter<tinkoff::cloud::stt::v1::StreamingRecognizeRequest,
 						 tinkoff::cloud::stt::v1::StreamingRecognizeResponse>> stream(stt_stub->StreamingRecognize(&context));
+
+
+	try {
+		std::thread writer(
+			[stream, this]()
+			{
+				{
+					tinkoff::cloud::stt::v1::StreamingRecognizeRequest initial_request;
+					tinkoff::cloud::stt::v1::StreamingRecognitionConfig *streaming_recognition_config = initial_request.mutable_streaming_config();
+					{
+						tinkoff::cloud::stt::v1::RecognitionConfig *recognition_config = streaming_recognition_config->mutable_config();
+						switch (frame_format) {
+						case GRPC_STT_FRAME_FORMAT_SLINEAR16:
+							recognition_config->set_encoding(tinkoff::cloud::stt::v1::LINEAR16);
+							break;
+						case GRPC_STT_FRAME_FORMAT_MULAW:
+							recognition_config->set_encoding(tinkoff::cloud::stt::v1::MULAW);
+							break;
+						default:
+							recognition_config->set_encoding(tinkoff::cloud::stt::v1::ALAW);
+						}
+						recognition_config->set_sample_rate_hertz(INTERNAL_SAMPLE_RATE);
+						recognition_config->set_num_channels(1);
+						if (language_code.size())
+							recognition_config->set_language_code(language_code);
+						recognition_config->set_max_alternatives(max_alternatives);
+						if (vad_disable) {
+							recognition_config->set_do_not_perform_vad(true);
+						} else {
+							tinkoff::cloud::stt::v1::VoiceActivityDetectionConfig *vad_config = recognition_config->mutable_vad_config();
+							vad_config->set_min_speech_duration(vad_min_speech_duration);
+							vad_config->set_max_speech_duration(vad_max_speech_duration);
+							vad_config->set_silence_duration_threshold(vad_silence_duration_threshold);
+							vad_config->set_silence_prob_threshold(vad_silence_prob_threshold);
+							vad_config->set_aggressiveness(vad_aggressiveness);
+						}
+					}
+					{
+						tinkoff::cloud::stt::v1::InterimResultsConfig *interim_results_config = streaming_recognition_config->mutable_interim_results_config();
+						interim_results_config->set_enable_interim_results(interim_results_enable);
+						interim_results_config->set_interval(interim_results_interval);
+					}
+					stream->Write(initial_request);
+				}
+			}
+		);
+		writer.join();
+
+		stream->WaitForInitialMetadata();
+		const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
+		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
+		push_grpcstt_x_request_id_event(chan, (x_request_id_it != metadata.end()) ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "");
+	} catch (const std::exception &ex) {
+		error_status = -1;
+		error_message = std::string("GRPC STT finished with error: ") + ex.what();
+		return false;
+	} catch (...) {
+		error_status = -1;
+		error_message = "GRPC STT finished with unknown error";
+		return false;
+	}
+
 	std::thread writer(
 		[stream, this]()
 		{
-			{
-				tinkoff::cloud::stt::v1::StreamingRecognizeRequest initial_request;
-				tinkoff::cloud::stt::v1::StreamingRecognitionConfig *streaming_recognition_config = initial_request.mutable_streaming_config();
-				{
-					tinkoff::cloud::stt::v1::RecognitionConfig *recognition_config = streaming_recognition_config->mutable_config();
-					switch (frame_format) {
-					case GRPC_STT_FRAME_FORMAT_SLINEAR16:
-						recognition_config->set_encoding(tinkoff::cloud::stt::v1::LINEAR16);
-						break;
-					case GRPC_STT_FRAME_FORMAT_MULAW:
-						recognition_config->set_encoding(tinkoff::cloud::stt::v1::MULAW);
-						break;
-					default:
-						recognition_config->set_encoding(tinkoff::cloud::stt::v1::ALAW);
-					}
-					recognition_config->set_sample_rate_hertz(INTERNAL_SAMPLE_RATE);
-					recognition_config->set_num_channels(1);
-					if (language_code.size())
-						recognition_config->set_language_code(language_code);
-					recognition_config->set_max_alternatives(max_alternatives);
-					if (vad_disable) {
-						recognition_config->set_do_not_perform_vad(true);
-					} else {
-						tinkoff::cloud::stt::v1::VoiceActivityDetectionConfig *vad_config = recognition_config->mutable_vad_config();
-						vad_config->set_min_speech_duration(vad_min_speech_duration);
-						vad_config->set_max_speech_duration(vad_max_speech_duration);
-						vad_config->set_silence_duration_threshold(vad_silence_duration_threshold);
-						vad_config->set_silence_prob_threshold(vad_silence_prob_threshold);
-						vad_config->set_aggressiveness(vad_aggressiveness);
-					}
-				}
-				{
-					tinkoff::cloud::stt::v1::InterimResultsConfig *interim_results_config = streaming_recognition_config->mutable_interim_results_config();
-					interim_results_config->set_enable_interim_results(interim_results_enable);
-					interim_results_config->set_interval(interim_results_interval);
-				}
-				stream->Write(initial_request);
-			}
-
 			bool stream_valid = true;
 			bool warned = false;
 			struct timespec last_frame_moment;
@@ -485,7 +519,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 					int gap_samples = aligned_samples(delta_samples(&current_moment, &last_frame_moment) - MAX_FRAME_SAMPLES);
 					if (gap_samples > 0) {
 						tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
-						std::vector<uint8_t> buffer(gap_samples*2);
+						std::vector<uint8_t> buffer = make_silence_samples(frame_format, gap_samples);
 						request.set_audio_content(buffer.data(), buffer.size());
 						if (!stream->Write(request))
 							stream_valid = false;
@@ -511,7 +545,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 							int gap_samples = aligned_samples(delta_samples(&current_moment, &last_frame_moment) - f->samples);
 							if (gap_samples > 0) {
 								tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
-								std::vector<uint8_t> buffer(gap_samples*2);
+								std::vector<uint8_t> buffer = make_silence_samples(frame_format, gap_samples);
 								request.set_audio_content(buffer.data(), buffer.size());
 								if (!stream->Write(request))
 									stream_valid = false;
@@ -525,6 +559,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 						size_t len = 0;
 						const char *data = get_frame_samples(f, frame_format, buffer, &len, &warned);
 						if (data) {
+							time_add_samples(&last_frame_moment, f->samples);
 							request.set_audio_content(data, len);
 							if (!stream->Write(request))
 								stream_valid = false;
@@ -532,7 +567,6 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 					}
 
 					ast_frame_dtor(f);
-					clock_gettime(CLOCK_MONOTONIC_RAW, &last_frame_moment);
 				}
 			}
 
@@ -541,11 +575,6 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 	);
 
 	try {
-		stream->WaitForInitialMetadata();
-		const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
-		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
-		push_grpcstt_x_request_id_event(chan, (x_request_id_it != metadata.end()) ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "");
-
 		tinkoff::cloud::stt::v1::StreamingRecognizeResponse response;
 		while (stream->Read(&response)) {
 			for (const tinkoff::cloud::stt::v1::StreamingRecognitionResult &stream_result: response.results()) {
