@@ -1,0 +1,32 @@
+--- grpc/src/core/lib/iomgr/ev_epollex_linux.cc.orig	2020-07-02 09:32:55.180897021 +0300
++++ grpc/src/core/lib/iomgr/ev_epollex_linux.cc	2020-07-02 09:43:27.820870486 +0300
+@@ -1438,17 +1438,21 @@
+       break;
+     }
+   }
+-  GPR_ASSERT(i != pss->pollset_count);
+-  for (; i < pss->pollset_count - 1; i++) {
+-    pss->pollsets[i] = pss->pollsets[i + 1];
++  bool set_found = i != pss->pollset_count;
++  if (set_found) {
++    for (; i < pss->pollset_count - 1; i++) {
++      pss->pollsets[i] = pss->pollsets[i + 1];
++    }
++    pss->pollset_count--;
+   }
+-  pss->pollset_count--;
+   gpr_mu_unlock(&pss->mu);
+-  gpr_mu_lock(&ps->mu);
+-  if (0 == --ps->containing_pollset_set_count) {
+-    pollset_maybe_finish_shutdown(ps);
++  if (set_found) {
++    gpr_mu_lock(&ps->mu);
++    if (0 == --ps->containing_pollset_set_count) {
++      pollset_maybe_finish_shutdown(ps);
++    }
++    gpr_mu_unlock(&ps->mu);
+   }
+-  gpr_mu_unlock(&ps->mu);
+ }
+ 
+ // add all fds to pollables, and output a new array of unorphaned out_fds
