@@ -141,6 +141,20 @@ static void push_playbackground_error_event(struct ast_channel *chan, int layer_
 
 	ast_json_unref(blob);
 }
+static void push_playbackground_x_request_id_event(struct ast_channel *chan, int layer_i, const char *x_request_id)
+{
+	char data[512];
+	snprintf(data, sizeof(data), "%d,%s", layer_i, x_request_id);
+	struct ast_json *blob = ast_json_pack("{s: s, s: s}", "eventname", "PlayBackgroundXRequestId", "eventbody", data);
+	if (!blob)
+		return;
+
+	ast_channel_lock(chan);
+	ast_multi_object_blob_single_channel_publish(chan, ast_multi_user_event_type(), blob);
+	ast_channel_unlock(chan);
+
+	ast_json_unref(blob);
+}
 static void push_playbackground_duration_event(struct ast_channel *chan, int layer_i, double duration_secs)
 {
 	char data[128];
@@ -428,21 +442,32 @@ static inline void stream_source_file_buffer_frame(struct stream_source *source)
 	source->source.file.buffered_frame = fr;
 	source->source.file.buffered_frame_off = 0;
 }
-static inline int stream_source_synthesis_get_duration(struct stream_source *source, int64_t *duration)
+static inline int stream_source_synthesis_get_initial_data(struct stream_source *source, char x_request_id[256], int64_t *duration)
 {
 	if (source->source.synthesis.duration_announced) {
 		ast_log(LOG_ERROR, "PlayBackground() failed: duration already announced\n");
 		return -1;
 	}
 	grpctts_job_collect(source->source.synthesis.job);
-	if (grpctts_job_buffer_size(source->source.synthesis.job) >= sizeof(int64_t)) {
-		if (!grpctts_job_take_block(source->source.synthesis.job, sizeof(int64_t), duration)) {
-			ast_log(LOG_ERROR, "PlayBackground() failed: memory allocation error\n");
-			return -1;
-		}
-		return 1;
+	uint8_t x_request_id_len;
+	if (grpctts_job_buffer_size(source->source.synthesis.job) < (sizeof(int64_t) + sizeof(uint8_t)))
+		return 0;
+	if (!grpctts_job_take_block(source->source.synthesis.job, sizeof(int64_t), duration)) {
+		ast_log(LOG_ERROR, "PlayBackground() failed: memory allocation error\n");
+		return -1;
 	}
-	return 0;
+	if (!grpctts_job_take_block(source->source.synthesis.job, sizeof(uint8_t), &x_request_id_len)) {
+		ast_log(LOG_ERROR, "PlayBackground() failed: memory allocation error\n");
+		return -1;
+	}
+	if (grpctts_job_buffer_size(source->source.synthesis.job) < x_request_id_len)
+		return 0;
+	if (!grpctts_job_take_block(source->source.synthesis.job, x_request_id_len, x_request_id)) {
+		ast_log(LOG_ERROR, "PlayBackground() failed: memory allocation error\n");
+		return -1;
+	}
+	x_request_id[x_request_id_len] = '\0';
+	return 1;
 }
 static inline int stream_source_synthesis_eos(struct stream_source *source)
 {
@@ -998,14 +1023,16 @@ static inline void stream_layer_merge_frame(struct ast_frame *target_frame, stru
 		case STREAM_SOURCE_SYNTHESIS: {
 			if (!source->source.synthesis.duration_announced) {
 				int64_t duration_samples;
-				int ret = stream_source_synthesis_get_duration(source, &duration_samples);
+				char x_request_id[256];
+				int ret = stream_source_synthesis_get_initial_data(source, x_request_id, &duration_samples);
 				if (ret == -1) {
 					stream_layer_drop_jobs(layer);
-					push_playbackground_error_event(state->chan, layer_i, "Failed to get synthesis task duration");
+					push_playbackground_error_event(state->chan, layer_i, "Failed to get initial synthesis metadata");
 					return;
 				}
 				if (!ret)
 					continue;
+				push_playbackground_x_request_id_event(state->chan, layer_i, x_request_id);
 				push_playbackground_duration_event(state->chan, layer_i, ((double) duration_samples)/SAMPLE_RATE);
 				source->source.synthesis.duration_announced = 1;
 				source->source.synthesis.initial_buffer_samples = (size_t)

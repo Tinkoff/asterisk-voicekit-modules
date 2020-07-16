@@ -128,18 +128,35 @@ static void thread_routine(std::shared_ptr<ChannelBackend> channel_backend,
 	}
 	std::unique_ptr<grpc::ClientReader<tinkoff::cloud::tts::v1::StreamingSynthesizeSpeechResponse>> stream = tts_stub->StreamingSynthesize(&context, request);
 	stream->WaitForInitialMetadata();
-	const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
-	std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_audio_num_samples_it = metadata.find("x-audio-num-samples");
+	std::string x_request_id;
 	int64_t num_samples = -1;
-	if (x_audio_num_samples_it != metadata.end()) {
-		const grpc::string_ref &x_audio_num_samples_ref = x_audio_num_samples_it->second;
-		std::string x_audio_num_samples(x_audio_num_samples_ref.data(), x_audio_num_samples_ref.size());
-		std::size_t conv_count;
-		num_samples = std::stoll(x_audio_num_samples, &conv_count);
-		if (conv_count != x_audio_num_samples.size())
-			num_samples = -1;
+	const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
+	{
+		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
+		if (x_request_id_it != metadata.end()) {
+			const grpc::string_ref &x_request_id_ref = x_request_id_it->second;
+			x_request_id = std::string(x_request_id_ref.data(), x_request_id_ref.size());
+			if (x_request_id.size() > 255)
+				x_request_id.resize(255);
+		}
 	}
-	byte_queue->Push(std::string((const char *) &num_samples, sizeof(int64_t)));
+	{
+		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_audio_num_samples_it = metadata.find("x-audio-num-samples");
+		if (x_audio_num_samples_it != metadata.end()) {
+			const grpc::string_ref &x_audio_num_samples_ref = x_audio_num_samples_it->second;
+			std::string x_audio_num_samples(x_audio_num_samples_ref.data(), x_audio_num_samples_ref.size());
+			std::size_t conv_count;
+			num_samples = std::stoll(x_audio_num_samples, &conv_count);
+			if (conv_count != x_audio_num_samples.size())
+				num_samples = -1;
+		}
+	}
+	{
+		std::string initial_data((const char *) &num_samples, sizeof(int64_t));
+		initial_data.append(1, uint8_t(x_request_id.size()));
+		initial_data.append(x_request_id);
+		byte_queue->Push(initial_data);
+	}
 
 	tinkoff::cloud::tts::v1::StreamingSynthesizeSpeechResponse response;
 	while (stream->Read(&response)) {
