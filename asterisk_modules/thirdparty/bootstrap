@@ -2,6 +2,7 @@
 
 (git clone https://github.com/grpc/grpc.git -b v1.15.0 && cd grpc && git submodule update --init --recursive)
 patch -p0 -i grpc-build.patch
+patch -p0 -i grpc-gettid.patch
 patch -p0 -i grpc-transport_fd_pipe.patch
 patch -p0 -i grpc-pollset-fix.patch
 (git clone https://github.com/googleapis/googleapis.git -b common-protos-1_3_1 && cd googleapis && git submodule update --init --recursive)
