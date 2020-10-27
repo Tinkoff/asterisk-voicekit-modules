@@ -410,7 +410,7 @@ static inline void read_out_frames(struct ast_channel *chan)
 /*
   Waits for channel event or event on event_fd
   Returns:
-  -1 on epoll error
+  -1 on poll error
    0 on timeout
    1 on channel events except hangup
    2 on channel hangup
@@ -476,6 +476,11 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 		struct timespec rel_timeout;
 		time_set_sub(&rel_timeout, &deadline, &current_time);
 		int ret = wait_for_channel_and_event_fd(chan, queue->efd, &rel_timeout);
+		if (ret < 0) {
+			set_fail_status(chan, "POLL_ERROR");
+			ast_log(AST_LOG_WARNING, "Failed to poll for channel FDs: %s\n", strerror(errno));
+			return 0;
+		}
 		if (ret == 2) {
 			set_fail_status(chan, "HANGUP");
 			return 0;
