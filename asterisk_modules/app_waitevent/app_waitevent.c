@@ -488,6 +488,11 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 		if (ret == 1) {
 			read_out_frames(chan);
 		}
+		/* Recheck after reading out frames */
+		if (ast_check_hangup_locked(chan)) {
+			set_fail_status(chan, "HANGUP");
+			return 0;
+		}
 	}
 
 	if (entry) {
