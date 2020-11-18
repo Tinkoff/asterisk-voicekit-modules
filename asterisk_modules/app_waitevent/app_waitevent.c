@@ -473,6 +473,11 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 		clock_gettime(CLOCK_MONOTONIC_RAW, &current_time);
 		if (time_ge (&current_time, &deadline))
 			break;
+		/* Recheck after reading out frames */
+		if (ast_check_hangup_locked(chan)) {
+			set_fail_status(chan, "HANGUP");
+			return 0;
+		}
 		struct timespec rel_timeout;
 		time_set_sub(&rel_timeout, &deadline, &current_time);
 		int ret = wait_for_channel_and_event_fd(chan, queue->efd, &rel_timeout);
