@@ -123,6 +123,11 @@ static const char *waitevent_app = "WaitEvent";
 	</application>
  ***/
 
+
+#define MAX_POLL_SEC 10
+#define MAX_POLL_NSEC 0
+
+
 struct user_message {
 	struct ast_json *json_value;
 	AST_DLLIST_ENTRY(user_message) list_meta;
@@ -383,6 +388,15 @@ static inline void time_set_sub(struct timespec *sub, const struct timespec *a, 
 		sub->tv_nsec += 1000000000;
 	}
 }
+static inline void time_trim(struct timespec *t, time_t max_sec, long max_nsec)
+{
+	if (t->tv_sec > max_sec) {
+		t->tv_sec = max_sec;
+		t->tv_nsec = max_nsec;
+	} else if (t->tv_sec == max_sec && t->tv_nsec > max_nsec) {
+		t->tv_nsec = max_nsec;
+	}
+}
 static inline int time_gt(const struct timespec *a, const struct timespec *b)
 {
 	return
@@ -480,6 +494,7 @@ static int waitevent_exec(struct ast_channel *chan, const char *data)
 		}
 		struct timespec rel_timeout;
 		time_set_sub(&rel_timeout, &deadline, &current_time);
+		time_trim(&rel_timeout, MAX_POLL_SEC, MAX_POLL_NSEC);
 		int ret = wait_for_channel_and_event_fd(chan, queue->efd, &rel_timeout);
 		if (ret < 0) {
 			set_fail_status(chan, "POLL_ERROR");
