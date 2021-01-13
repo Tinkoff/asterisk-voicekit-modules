@@ -617,8 +617,8 @@ static inline void parse_say_input(struct grpctts_job_input *input, struct parse
 	struct ast_json *json;
 	if ((json = ast_json_object_get(root, "text")))
 		input->text = ast_json_string_get(json);
-    if ((json = ast_json_object_get(root, "ssml")))
-        input->ssml = ast_json_string_get(json);
+	if ((json = ast_json_object_get(root, "ssml")))
+		input->ssml = ast_json_string_get(json);
 }
 static int parse_play_args(const char **play_filename, const char *arg)
 {

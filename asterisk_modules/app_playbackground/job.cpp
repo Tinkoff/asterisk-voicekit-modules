@@ -54,7 +54,7 @@ static void thread_routine(std::shared_ptr<ChannelBackend> channel_backend,
 			   double speaking_rate, double pitch, double volume_gain_db,
 			   const std::string &voice_language_code, const std::string &voice_name, enum tinkoff::cloud::tts::v1::SsmlVoiceGender ssml_gender,
 			   enum grpctts_frame_format remote_frame_format,
-			   const struct grpctts_job_input &job_input, std::shared_ptr<ByteQueue> byte_queue)
+			   const std::string &text, const std::string &ssml, std::shared_ptr<ByteQueue> byte_queue)
 {
 	auto gprc_shutdown_caller = BuildSafeRAII(grpc_shutdown /* To survie module unloading */);
 	auto byte_queue_finalizer = BuildSafeRAII([byte_queue]()
@@ -95,14 +95,14 @@ static void thread_routine(std::shared_ptr<ChannelBackend> channel_backend,
 	std::unique_ptr<tinkoff::cloud::tts::v1::TextToSpeech::Stub> tts_stub = tinkoff::cloud::tts::v1::TextToSpeech::NewStub(grpc_channel);
 	tinkoff::cloud::tts::v1::SynthesizeSpeechRequest request;
 
-    std::string text = CXX_STRING(job_input.text);
-    std::string ssml = CXX_STRING(job_input.ssml);
-    if (text.size()) {
-        tinkoff::cloud::tts::v1::SynthesisInput *input = request.mutable_input();
-        input->set_text(job_input.text);
-	} else if (ssml.size()) {
-        tinkoff::cloud::tts::v1::SynthesisInput *input = request.mutable_input();
-        input->set_ssml(ssml);
+	{
+		tinkoff::cloud::tts::v1::SynthesisInput *input = request.mutable_input();
+		if (text.size()) {
+			input->set_text(text);
+		}
+		if (ssml.size()) {
+			input->set_ssml(ssml);
+		}
 	}
 	{
 		tinkoff::cloud::tts::v1::VoiceSelectionParams *voice = request.mutable_voice();
@@ -221,7 +221,7 @@ Job::Job(std::shared_ptr<ChannelBackend> channel_backend,
 					 channel_backend,
 					 speaking_rate, pitch, volume_gain_db,
 					 voice_language_code, voice_name, ssml_gender, remote_frame_format,
-					 job_input, byte_queue);
+					 CXX_STRING(job_input.text), CXX_STRING(job_input.ssml), byte_queue);
 	thread.detach();
 }
 Job::~Job()
