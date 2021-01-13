@@ -41,6 +41,7 @@ enum grpctts_frame_format {
 
 struct grpctts_job_input {
 	const char *text;
+	const char *ssml;
 };
 
 extern void grpctts_set_stream_error_callback(
