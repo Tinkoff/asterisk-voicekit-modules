@@ -18,7 +18,14 @@ fi
 asteriskmoduledir="$libdir/asterisk/modules"
 AC_SUBST(asteriskmoduledir)
 
-asterisk_xmldoc_dir="$localstatedir/lib/asterisk/documentation"
+AC_ARG_WITH([asterisk-xmldoc-dir],
+    [AS_HELP_STRING([--with-asterisk-xmldoc-dir=DIR],
+              [Asterisk XML documentation directory @<:@default=$localstatedir/lib/asterisk/documentation@:>@])],
+    [asterisk_xmldoc_dir=$withval],
+    [asterisk_xmldoc_dir=$localstatedir/lib/asterisk/documentation])
+if test -z "$asterisk_xmldoc_dir"; then          
+    AC_MSG_ERROR([Empty directory for '--with-asterisk-xmldoc-dir=' specified])
+fi                                               
 AC_SUBST(asterisk_xmldoc_dir)
 
 AC_OUTPUT
