@@ -1,0 +1,45 @@
+context voicekit-demo {
+	h => {
+		Log(NOTICE,Hangup);
+	};
+	parrot => {
+		Answer();
+		WaitEventInit();
+		GRPCSTTBackground(); // Start listening for recognized text events in background
+		PlayBackgroundInitGRPCTTS();
+		PlayBackground(say,,{"text":"привет"});
+		Set(CALL_END_TIME=$[${GET_TIME_NSEC(MONOTONIC)} + 600]); // Hangup after 10 minutes
+		Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]);
+
+		while (${SLEEP_TIME} > 0) {
+			WaitEvent(${SLEEP_TIME}); // Waiting for next event no longer than specified timeout
+			if (${WAITEVENTSTATUS} == SUCCESS) {
+				switch (${WAITEVENTNAME}) {
+				case GRPCSTT_UTF8:
+					// WARNING: Following is a quick hack and shouln't be used at production services
+					// Either using https://github.com/drivefast/asterisk-res_json module or
+					// processing events with AMI client is advised
+					AGI(extract_text,${QUOTE(${WAITEVENTBODY})}); // Using "jq" command line tool to extract spoken text
+					if (${EXTRACTED_TEXT} != "") {
+						Log(NOTICE,Extracted text: ${EXTRACTED_TEXT});
+						PlayBackground(&say,,{"text":${EXTRACTED_TEXT}}); // Enqueueing spoken text
+					}
+					break;
+				case GRPCSTT_SESSION_FINISHED:
+					Log(NOTICE,STT session finished: ${WAITEVENTBODY});
+					Set(CALL_END_TIME=0);
+					break;
+				case PlayBackgroundError:
+					Log(NOTICE,Synthesis error: ${WAITEVENTBODY});
+					Set(CALL_END_TIME=0);
+					break;
+				default:
+				}
+			} else {
+				Log(NOTICE,WaitEvent() returned with WAITEVENTSTATUS == ${WAITEVENTSTATUS});
+			}
+			Set(SLEEP_TIME=$[${CALL_END_TIME} - ${GET_TIME_NSEC(MONOTONIC)}]);
+		}
+		Hangup();
+	}
+};
