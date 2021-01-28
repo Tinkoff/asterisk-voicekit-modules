@@ -1,0 +1,5 @@
+#!/bin/bash
+
+echo -n 'SET VARIABLE EXTRACTED_TEXT "\"'
+echo "$1" | jq -jr ".alternatives[0].transcript"
+echo '\""'
