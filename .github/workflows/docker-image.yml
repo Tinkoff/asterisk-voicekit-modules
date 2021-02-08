@@ -1,0 +1,22 @@
+name: Basic Docker Image with  Asterisk and VoiceKit modules
+
+on:
+  push:
+    branches: [ master feature/voicekit_demo_container ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Login to Docker
+      env:
+        DOCKER_USER: ${{ secrets.DOCKER_USER }}   
+        DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}  
+      run: docker login -u $DOCKER_USER -p $DOCKER_PASSWORD
+    - name: Build and push Docker image
+      env:
+        IMAGE_VERSION: $(git describe --tags)
+      run: |
+        docker build . --tag asterisk-voicekit-modules:${IMAGE_VERSION}
+        docker push asterisk-voicekit-modules:${IMAGE_VERSION}
