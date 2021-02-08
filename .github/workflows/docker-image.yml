@@ -1,0 +1,22 @@
+name: Basic Docker Image with Asterisk VoiceKit modules
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+    - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+    - name: Login to Docker
+      run: docker login -u ${{ secrets.DOCKER_USER }} -p ${{ secrets.DOCKER_PASSWORD }}
+    - name: Build and push Docker image
+      run: |
+        IMAGE_VERSION=$(git describe --tags)
+        docker build . --tag tinkoffcreditsystems/asterisk-voicekit-modules:"${IMAGE_VERSION}"
+        docker push tinkoffcreditsystems/asterisk-voicekit-modules:"${IMAGE_VERSION}"

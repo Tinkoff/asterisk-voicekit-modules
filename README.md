@@ -39,6 +39,9 @@ docker run -it --network=host --mount type=bind,src="$PWD/container-mnt",dst=/mn
 
 **NOTE**: System-wide Asterisk must be stopped if running!
 
+For pre-built containers see: https://hub.docker.com/r/tinkoffcreditsystems/asterisk-voicekit-modules/tags
+
+
 4. Install Ekiga:
 
 ```
