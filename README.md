@@ -18,14 +18,15 @@ QUICKSTART
 ----------
 
 See 'examples' directory for dial-plan and configuration examples.
-Also you may build docker container with STT and TTS demo using your API credentials.
 
-Building demo container
-=======================
+You may also build Docker image or use pre-built one with STT and TTS demo using your API credentials.
+
+Building demo Docker image
+==========================
 
 1. Put your API credentials into `api_key` and `secret_key` variables at `container-mnt/grpcstt.conf` and `container-mnt/grpcstt.conf`
 
-2. Build container:
+2. Build image:
 
 ```
 docker build -t asterisk-voicekit-demo .
@@ -39,13 +40,33 @@ docker run -it --network=host --mount type=bind,src="$PWD/container-mnt",dst=/mn
 
 **NOTE**: System-wide Asterisk must be stopped if running!
 
-4. Install Ekiga:
+Using pre-built Docker image
+============================
+
+1. Put your API credentials into `api_key` and `secret_key` variables at `container-mnt/grpcstt.conf` and `container-mnt/grpcstt.conf`
+
+2. Run container in foreground mode:
+
+```
+docker run -it --network=host --mount type=bind,src="$PWD/container-mnt",dst=/mnt tinkoffcreditsystems/asterisk-voicekit-modules:`git describe --tags`
+```
+
+**NOTE**: System-wide Asterisk must be stopped if running!
+
+**NOTE**: The modules repository must be at recent release tag for `git describe --tags` to work properly!
+
+For full list of pre-built images see: https://hub.docker.com/r/tinkoffcreditsystems/asterisk-voicekit-modules/tags
+
+Configuring SIP client
+======================
+
+1. Install Ekiga:
 
 ```
 sudo apt-get install ekiga
 ```
 
-4. Configure Ekiga:
+2. Configure Ekiga:
 
 - Set "Edit -> Preferences -> Protocols -> SIP settings -> Outbound proxy" to "localhost"
 - Add account at "Edit -> Accounts" with following settings:
@@ -58,7 +79,7 @@ sudo apt-get install ekiga
   - Name: `Voicekit parrot`
   - Address: `sip:parrot`
 
-4. Call contact `Voicekit parrot`
+3. Call contact `Voicekit parrot`
 
 LICENSING
 ---------
