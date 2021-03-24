@@ -370,10 +370,17 @@ static void store_event(struct ast_channel *chan, struct ast_json *root)
 fail:
 	set_fail_status(chan, "BAD_EVENT");
 }
-static inline void add_time(struct timespec *ts, double timeout)
+static inline void add_time(struct timespec *ts, double addition)
 {
-	ts->tv_sec += lrint(ceil(timeout));
-	ts->tv_nsec += lrint(remainder(timeout, 1.0)*1000000000.0);
+	double rint_addition = floor(addition);
+	long int int_addition = lrint(rint_addition);
+	ts->tv_sec += int_addition;
+	long int nsec_delta = lrint((addition - rint_addition)*1000000000.0);
+	if (nsec_delta < 0)
+		nsec_delta = 0;
+	else if (nsec_delta > 999999999)
+		nsec_delta = 999999999;
+	ts->tv_nsec += nsec_delta;
 	if (ts->tv_nsec >= 1000000000) {
 		++ts->tv_sec;
 		ts->tv_nsec -= 1000000000;
@@ -440,7 +447,6 @@ static int wait_for_channel_and_event_fd(struct ast_channel *chan, int event_fd,
 		pollfds[i].fd = ast_channel_fd(chan, i);
 		pollfds[i].events = ast_channel_fd_isset(chan, i) ? POLLIN : 0;
 		pollfds[i].revents = 0;
-			
 	}
 	{
 		pollfds[AST_MAX_FDS].fd = event_fd;
