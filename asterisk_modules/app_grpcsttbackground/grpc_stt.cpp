@@ -73,7 +73,7 @@ static inline int delta_samples(const struct timespec *a, const struct timespec 
 		delta.tv_sec--;
 		delta.tv_nsec += 1000000000;
 	}
-	
+
 	return delta.tv_sec*INTERNAL_SAMPLE_RATE + ((int64_t) delta.tv_nsec)*INTERNAL_SAMPLE_RATE/1000000000;
 }
 static inline void time_add_samples(struct timespec *t, int samples)
@@ -192,7 +192,7 @@ static const char *get_frame_samples(struct ast_frame *f, enum grpc_stt_frame_fo
 		} else if (f->subclass.format == ast_format_slin) {
 			data = (const char *) f->data.ptr;
 		} else {
-			if (!warned) {
+			if (!*warned) {
 				ast_log(AST_LOG_WARNING, "Unhandled frame format, ignoring!\n");
 				*warned = true;
 			}
@@ -221,7 +221,7 @@ static const char *get_frame_samples(struct ast_frame *f, enum grpc_stt_frame_fo
 			}
 			data = (const char *) buffer.data();
 		} else {
-			if (!warned) {
+			if (!*warned) {
 				ast_log(AST_LOG_WARNING, "Unhandled frame format, ignoring!\n");
 				*warned = true;
 			}
@@ -250,7 +250,7 @@ static const char *get_frame_samples(struct ast_frame *f, enum grpc_stt_frame_fo
 			}
 			data = (const char *) buffer.data();
 		} else {
-			if (!warned) {
+			if (!*warned) {
 				ast_log(AST_LOG_WARNING, "Unhandled frame format, ignoring!\n");
 				*warned = true;
 			}
