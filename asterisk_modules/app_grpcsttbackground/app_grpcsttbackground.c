@@ -244,7 +244,7 @@ static struct thread_conf *make_thread_conf(const struct thread_conf *source)
 	size_t endpoint_len = strlen(source->endpoint) + 1;
 	size_t language_code_len = source->language_code ? (strlen(source->language_code) + 1) : 0;
 	size_t ca_data_len = source->ca_data ? (strlen(source->ca_data) + 1) : 0;
-	struct thread_conf *conf = ast_malloc(sizeof(struct thread_conf) + authorization_api_key_len + authorization_api_key_len +
+	struct thread_conf *conf = ast_malloc(sizeof(struct thread_conf) + authorization_api_key_len + authorization_secret_key_len +
 					      authorization_issuer_len + authorization_subject_len + authorization_audience_len +
 					      endpoint_len + ca_data_len + language_code_len);
 	if (!conf)
