@@ -70,6 +70,9 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 					<option name="A">
 						<para>Encode UTF-8 characters as ASCII escape sequence at generated JSON events</para>
 					</option>
+					<option name="G">
+						<para>Enable gender identification to response</para>
+					</option>
 				</optionlist>
 			</parameter>
 			<parameter name="language_code">
@@ -138,11 +141,15 @@ static const char app_finish[] = "GRPCSTTBackgroundFinish";
 enum grpcsttbackground_flags {
 	GRPCSTTBACKGROUND_FLAG_NO_SSL_GRPC = (1 << 1),
 	GRPCSTTBACKGROUND_FLAG_SSL_GRPC = (1 << 2),
+	GRPCSTTBACKGROUND_FLAG_GENDER_IDENTIFICATION_GRPC = (1 << 3),
+	GRPCSTTBACKGROUND_FLAG_OFF_GENDER_IDENTIFICATION_GRPC = (1 << 4),
 };
 
 AST_APP_OPTIONS(grpcsttbackground_opts, {
 	AST_APP_OPTION('s', GRPCSTTBACKGROUND_FLAG_NO_SSL_GRPC),
 	AST_APP_OPTION('S', GRPCSTTBACKGROUND_FLAG_SSL_GRPC),
+	AST_APP_OPTION('G', GRPCSTTBACKGROUND_FLAG_GENDER_IDENTIFICATION_GRPC),
+	AST_APP_OPTION('g', GRPCSTTBACKGROUND_FLAG_OFF_GENDER_IDENTIFICATION_GRPC),
 });
 
 struct thread_conf {
@@ -167,6 +174,7 @@ struct thread_conf {
 	double vad_aggressiveness;
 	int interim_results_enable;
 	double interim_results_interval;
+	int enable_gender_identification;
 };
 
 static struct thread_conf dflt_thread_conf = {
@@ -191,6 +199,7 @@ static struct thread_conf dflt_thread_conf = {
 	.vad_aggressiveness = 0.0,
 	.interim_results_enable = 0,
 	.interim_results_interval = 0.0,
+	.enable_gender_identification = 0,
 };
 static ast_mutex_t dflt_thread_conf_mutex;
 
@@ -279,6 +288,7 @@ static struct thread_conf *make_thread_conf(const struct thread_conf *source)
 	conf->vad_aggressiveness = source->vad_aggressiveness;
 	conf->interim_results_enable = source->interim_results_enable;
 	conf->interim_results_interval = source->interim_results_interval;
+	conf->enable_gender_identification = source->enable_gender_identification;
 	return conf;
 }
 
@@ -291,7 +301,7 @@ static void *thread_start(struct thread_conf *conf)
 		     chan, conf->ssl_grpc, conf->ca_data, conf->language_code, conf->max_alternatives, conf->frame_format,
 		     conf->vad_disable, conf->vad_min_speech_duration, conf->vad_max_speech_duration,
 		     conf->vad_silence_duration_threshold, conf->vad_silence_prob_threshold, conf->vad_aggressiveness,
-		     conf->interim_results_enable, conf->interim_results_interval);
+		     conf->interim_results_enable, conf->interim_results_interval, conf->enable_gender_identification);
 
 	close(conf->terminate_event_fd);
 	ast_channel_unref(chan);
@@ -329,6 +339,7 @@ static void clear_config(void)
 	dflt_thread_conf.vad_aggressiveness = 0.0;
 	dflt_thread_conf.interim_results_enable = 0;
 	dflt_thread_conf.interim_results_interval = 0.0;
+	dflt_thread_conf.enable_gender_identification = 0;
 }
 static int load_config(int reload)
 {
@@ -413,6 +424,14 @@ static int load_config(int reload)
 					dflt_thread_conf.interim_results_interval = atof(var->value);
 				} else {
 					ast_log(LOG_WARNING, "%s: Cat:%s. Unknown keyword %s at line %d of grpcstt.conf\n", app, cat, var->name, var->lineno);
+				}
+				var = var->next;
+			}
+		} else if (!strcasecmp(cat, "gender_identification")) {
+			struct ast_variable *var = ast_variable_browse(cfg, cat);
+			while (var) {
+				if (!strcasecmp(var->name, "enable")) {
+					dflt_thread_conf.enable_gender_identification = ast_true(var->value);
 				}
 				var = var->next;
 			}
@@ -558,6 +577,11 @@ static int grpcsttbackground_exec(struct ast_channel *chan, const char *data)
 			thread_conf.ssl_grpc = 0;
 		if (ast_test_flag(&flags, GRPCSTTBACKGROUND_FLAG_SSL_GRPC))
 			thread_conf.ssl_grpc = 1;
+
+		if (ast_test_flag(&flags, GRPCSTTBACKGROUND_FLAG_OFF_GENDER_IDENTIFICATION_GRPC))
+			thread_conf.enable_gender_identification = 0;
+		if (ast_test_flag(&flags, GRPCSTTBACKGROUND_FLAG_GENDER_IDENTIFICATION_GRPC))
+			thread_conf.enable_gender_identification = 1;
 	}
 
 	if (args.language_code && *args.language_code)

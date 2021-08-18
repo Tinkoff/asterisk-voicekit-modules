@@ -48,6 +48,10 @@ enable=true
 ;Interim results interval. Default: settings at Speech-To-Text server
 interval=3
 
+[gender_identification]
+
+;Enable gender identification. Default: no
+enable=true
 
 [authorization]
 
