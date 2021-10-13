@@ -341,7 +341,7 @@ static void update_next_frame_time(struct timespec *frame_time)
 	if (time_less(frame_time, &current_time)) {
 		*frame_time = current_time;
 		time_align_frame_time(frame_time);
-	}	
+	}
 }
 static inline int wait_for_deadline(const struct timespec *deadline, int efd)
 {
@@ -926,7 +926,7 @@ static int merge_fill_source_synthesis(struct stream_source *source, short **tar
 		++(synthesis->buffered_frame_off);
 	}
 	return 0;
-}	
+}
 static inline int merge_source_synthesis(struct stream_source *source, int layer_i, short **target_data, int *samples_to_merge)
 {
 	struct stream_source_synthesis *synthesis = &source->source.synthesis;
@@ -1032,8 +1032,8 @@ static inline void stream_layer_merge_frame(struct ast_frame *target_frame, stru
 					push_playbackground_error_event(state->chan, layer_i, "Failed to get initial synthesis metadata");
 					return;
 				}
-				if (!ret)
-					continue;
+				if (!ret) /* No initial data yet, skipping this frame */
+					return;
 				push_playbackground_x_request_id_event(state->chan, layer_i, x_request_id);
 				push_playbackground_duration_event(state->chan, layer_i, ((double) duration_samples)/SAMPLE_RATE);
 				source->source.synthesis.duration_announced = 1;
@@ -1075,31 +1075,42 @@ static inline int stream_layer_stream_merged_frame(struct stream_layer *layers, 
 	char *layer_busy_flags = ast_alloca(layer_count);
 	{
 		int i;
-		for (i = 0; i < layer_count; ++i) {
-			int busy = layers[i].source.type != STREAM_SOURCE_NONE;
-			have_busy_layers_before |= busy;
-			layer_busy_flags[i] = busy;
-		}
+		for (i = 0; i < layer_count; ++i)
+			have_busy_layers_before |= layers[i].source.type != STREAM_SOURCE_NONE;
 	}
 	if (have_busy_layers_before)
 		check_start_void_generator(chan);
-
-	/* 2.2. Merge all layers into the frame */
-	{
-		int i;
-		for (i = 0; i < layer_count; ++i)
-			stream_layer_merge_frame(frame, &layers[i], state, i);
-	}
-
-	/* 2.3. Send events for finished streams */
 	char have_busy_layers_after = 0;
-	{
-		int i;
-		for (i = 0; i < layer_count; ++i) {
-			int busy = layers[i].source.type != STREAM_SOURCE_NONE;
-			have_busy_layers_after |= busy;
-			if (layer_busy_flags[i] && !busy)
-				push_playbackground_finished_event(state->chan, i);
+
+	/* 2.2. Process stream layers */
+	int have_unqueued_jobs = 1;
+	while (have_unqueued_jobs) {
+		/* 2.2.1. Collect info about stream business */
+		{
+			int i;
+			for (i = 0; i < layer_count; ++i)
+				layer_busy_flags[i] = layers[i].source.type != STREAM_SOURCE_NONE;
+		}
+
+		/* 2.2.2. Merge all layers into the frame */
+		{
+			int i;
+			for (i = 0; i < layer_count; ++i)
+				stream_layer_merge_frame(frame, &layers[i], state, i);
+		}
+
+		/* 2.2.3. Send events for finished streams and check for unqueued jobs */
+		have_unqueued_jobs = 0;
+		{
+			int i;
+			for (i = 0; i < layer_count; ++i) {
+				int busy = layers[i].source.type != STREAM_SOURCE_NONE;
+				have_busy_layers_after |= busy;
+				if (layer_busy_flags[i] && !busy)
+					push_playbackground_finished_event(state->chan, i);
+				if (!busy && layers[i].jobs)
+					have_unqueued_jobs = 1;
+			}
 		}
 	}
 
