@@ -11,6 +11,7 @@ app_grpcsttbackground_la_SOURCES = \
 	app_grpcsttbackground.c \
 	grpc_stt.cpp \
 	jwt.cpp \
+	channel_manager.cpp \
 	$(PROTO_BUILT_SOURCES)
 app_grpcsttbackground_la_CFLAGS = -Wall -O3 -Werror=implicit-function-declaration -Wstrict-prototypes -Wmissing-prototypes -Wmissing-declarations -I../thirdparty/inst/include \
 	-fPIC -DAST_MODULE=\"app_grpcsttbackground\" -DASTERISK_MODULE_VERSION_STRING=\"`git describe --tags --always`\"

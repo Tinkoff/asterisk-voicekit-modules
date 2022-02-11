@@ -653,6 +653,7 @@ static int grpcsttbackgroundfinish_exec(struct ast_channel *chan, const char *da
 
 static int unload_module(void)
 {
+	clear_grpc_chann_storage();
 	grpc_shutdown();
 	ast_mutex_lock(&dflt_thread_conf_mutex);
 	clear_config();
@@ -665,6 +666,7 @@ static int unload_module(void)
 static int load_module(void)
 {
 	grpc_init();
+	init_grpc_chann_storage();
 	if (load_config(0) ||
 	    (ast_register_application_xml(app, grpcsttbackground_exec) |
 	     ast_register_application_xml(app_finish, grpcsttbackgroundfinish_exec)))
