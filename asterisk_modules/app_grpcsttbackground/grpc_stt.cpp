@@ -24,6 +24,7 @@ extern "C" struct ast_module *AST_MODULE_SELF_SYM(void);
 #include "roots.pem.h"
 #include "grpc_stt.h"
 #include "jwt.h"
+#include "channel_manager.h"
 
 #include <chrono>
 #include <iostream>
@@ -61,9 +62,6 @@ extern "C" {
 #define ALIGNMENT_SAMPLES 80
 
 
-static const std::string grpc_roots_pem_string ((const char *) grpc_roots_pem, sizeof(grpc_roots_pem));
-
-
 static inline int delta_samples(const struct timespec *a, const struct timespec *b)
 {
 	struct timespec delta;
@@ -73,7 +71,7 @@ static inline int delta_samples(const struct timespec *a, const struct timespec 
 		delta.tv_sec--;
 		delta.tv_nsec += 1000000000;
 	}
-	
+
 	return delta.tv_sec*INTERNAL_SAMPLE_RATE + ((int64_t) delta.tv_nsec)*INTERNAL_SAMPLE_RATE/1000000000;
 }
 static inline void time_add_samples(struct timespec *t, int samples)
@@ -635,13 +633,11 @@ extern "C" void grpc_stt_run(int terminate_event_fd, const char *endpoint, const
 	int error_status;
 	std::string error_message;
 	try {
-		grpc::SslCredentialsOptions ssl_credentials_options = {
-			.pem_root_certs = ca_data ? ca_data : grpc_roots_pem_string,
-		};
+		std::shared_ptr <grpc::Channel> channel = ChannelManager::get_channel(endpoint, ca_data, ssl_grpc);
 #define NON_NULL_STRING(str) ((str) ? (str) : "")
 		std::shared_ptr<GRPCSTT> grpc_stt = std::make_shared<GRPCSTT>(
 			terminate_event_fd,
-			grpc::CreateChannel(endpoint, (ssl_grpc ? grpc::SslCredentials(ssl_credentials_options) : grpc::InsecureChannelCredentials())),
+			channel,
 			NON_NULL_STRING(authorization_api_key), NON_NULL_STRING(authorization_secret_key),
 			NON_NULL_STRING(authorization_issuer), NON_NULL_STRING(authorization_subject), NON_NULL_STRING(authorization_audience),
 			chan, (language_code ? language_code : ""), max_alternatives, frame_format,
