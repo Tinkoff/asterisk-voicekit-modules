@@ -55,6 +55,8 @@ extern void grpc_stt_run(
 	double interim_results_interval,
 	int enable_gender_identification);
 
+extern void clear_grpc_chann_storage();
+
 #ifdef __cplusplus
 };
 #endif
