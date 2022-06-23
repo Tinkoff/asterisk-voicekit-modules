@@ -108,6 +108,13 @@ static json_t *build_json_gender_identification_result(const float male_proba, c
 	json_object_set_new_nocheck(json_gender_identification, "female_proba", json_real(female_proba));
 	return json_gender_identification;
 }
+static json_t *build_json_sentiment_analysis_result(const float negative_prob_audio, const float negative_prob_audio_text)
+{
+	json_t *json_sentiment_analysis = json_object();
+	json_object_set_new_nocheck(json_sentiment_analysis, "negative_prob_audio", json_real(negative_prob_audio));
+	json_object_set_new_nocheck(json_sentiment_analysis, "negative_prob_audio_text", json_real(negative_prob_audio_text));
+	return json_sentiment_analysis;
+}
 static std::string build_grpcstt_event(const tinkoff::cloud::stt::v1::StreamingRecognitionResult &stream_result, bool json_ensure_ascii)
 {
 	const tinkoff::cloud::stt::v1::SpeechRecognitionResult &recognition_result = stream_result.recognition_result();
@@ -133,6 +140,11 @@ static std::string build_grpcstt_event(const tinkoff::cloud::stt::v1::StreamingR
 	if (!(male_proba == 0 && female_proba == 0)) {
 		json_object_set_new_nocheck(json_root, "gender_identification_result", build_json_gender_identification_result(male_proba, female_proba));
 	}
+
+	const tinkoff::cloud::stt::v1::SpeechSentimentAnalysisResult &sentiment_analysis_result = recognition_result.sentiment_analysis_result();
+	const float negative_prob_audio = sentiment_analysis_result.negative_prob_audio();
+	const float negative_prob_audio_text = sentiment_analysis_result.negative_prob_audio_text();
+	json_object_set_new_nocheck(json_root, "sentiment_analysis_result", build_json_sentiment_analysis_result(negative_prob_audio, negative_prob_audio_text));
 
 	char *dump = json_dumps(json_root, (json_ensure_ascii ? (JSON_COMPACT | JSON_ENSURE_ASCII) : (JSON_COMPACT)));
 	std::string result(dump);
@@ -303,7 +315,8 @@ public:
 		const char *language_code, int max_alternatives, enum grpc_stt_frame_format frame_format,
 		bool vad_disable, double vad_min_speech_duration, double vad_max_speech_duration,
 		double vad_silence_duration_threshold, double vad_silence_prob_threshold, double vad_aggressiveness,
-		bool interim_results_enable, double interim_results_interval, bool enable_gender_identification);
+		bool interim_results_enable, double interim_results_interval, bool enable_gender_identification,
+		bool enable_sentiment_analysis);
 	~GRPCSTT();
 	void ReapAudioFrame(struct ast_frame *frame);
 	void Terminate() noexcept;
@@ -333,6 +346,7 @@ private:
 	bool interim_results_enable;
 	double interim_results_interval;
 	bool enable_gender_identification;
+	bool enable_sentiment_analysis;
 };
 
 
@@ -384,14 +398,16 @@ GRPCSTT::GRPCSTT(int terminate_event_fd, std::shared_ptr<grpc::Channel> grpc_cha
 		 struct ast_channel *chan, const char *language_code, int max_alternatives, enum grpc_stt_frame_format frame_format,
 		 bool vad_disable, double vad_min_speech_duration, double vad_max_speech_duration,
 		 double vad_silence_duration_threshold, double vad_silence_prob_threshold, double vad_aggressiveness,
-		 bool interim_results_enable, double interim_results_interval, bool enable_gender_identification)
+		 bool interim_results_enable, double interim_results_interval, bool enable_gender_identification,
+		 bool enable_sentiment_analysis)
 	: terminate_event_fd(terminate_event_fd), stt_stub(tinkoff::cloud::stt::v1::SpeechToText::NewStub(grpc_channel)),
 	authorization_api_key(authorization_api_key), authorization_secret_key(authorization_secret_key),
 	authorization_issuer(authorization_issuer), authorization_subject(authorization_subject), authorization_audience(authorization_audience),
 	chan(chan), language_code(language_code), max_alternatives(max_alternatives), frame_format(frame_format), framehook_id(-1),
 	vad_disable(vad_disable), vad_min_speech_duration(vad_min_speech_duration), vad_max_speech_duration(vad_max_speech_duration),
 	vad_silence_duration_threshold(vad_silence_duration_threshold), vad_silence_prob_threshold(vad_silence_prob_threshold), vad_aggressiveness(vad_aggressiveness),
-	interim_results_enable(interim_results_enable), interim_results_interval(interim_results_interval), enable_gender_identification(enable_gender_identification)
+	interim_results_enable(interim_results_enable), interim_results_interval(interim_results_interval), enable_gender_identification(enable_gender_identification),
+	enable_sentiment_analysis(enable_sentiment_analysis)
 {
 	frame_event_fd = eventfd(0, 0);
 	fcntl(frame_event_fd, F_SETFL, fcntl(frame_event_fd, F_GETFL) | O_NONBLOCK);
@@ -479,6 +495,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 							vad_config->set_aggressiveness(vad_aggressiveness);
 						}
 						recognition_config->set_enable_gender_identification(enable_gender_identification);
+						recognition_config->set_enable_sentiment_analysis(enable_sentiment_analysis);
 					}
 					{
 						tinkoff::cloud::stt::v1::InterimResultsConfig *interim_results_config = streaming_recognition_config->mutable_interim_results_config();
@@ -629,7 +646,8 @@ extern "C" void grpc_stt_run(int terminate_event_fd, const char *endpoint, const
 			     const char *language_code, int max_alternatives, enum grpc_stt_frame_format frame_format,
 			     int vad_disable, double vad_min_speech_duration, double vad_max_speech_duration,
 			     double vad_silence_duration_threshold, double vad_silence_prob_threshold, double vad_aggressiveness,
-			     int interim_results_enable, double interim_results_interval, int enable_gender_identification)
+			     int interim_results_enable, double interim_results_interval, int enable_gender_identification,
+			     int enable_sentiment_analysis)
 {
 	bool success = false;
 	int error_status;
@@ -647,7 +665,8 @@ extern "C" void grpc_stt_run(int terminate_event_fd, const char *endpoint, const
 			chan, (language_code ? language_code : ""), max_alternatives, frame_format,
 			vad_disable, vad_min_speech_duration, vad_max_speech_duration,
 			vad_silence_duration_threshold, vad_silence_prob_threshold, vad_aggressiveness,
-			interim_results_enable, interim_results_interval, enable_gender_identification
+			interim_results_enable, interim_results_interval, enable_gender_identification,
+			enable_sentiment_analysis
 		);
 #undef NON_NULL_STRING
 		GRPCSTT::AttachToChannel(grpc_stt);
