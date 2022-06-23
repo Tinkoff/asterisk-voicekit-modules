@@ -73,6 +73,9 @@ extern struct ast_module *AST_MODULE_SELF_SYM(void);
 					<option name="G">
 						<para>Enable gender identification to response</para>
 					</option>
+					<option name="N">
+						<para>Enable sentiment analysis to response</para>
+					</option>
 				</optionlist>
 			</parameter>
 			<parameter name="language_code">
@@ -143,6 +146,8 @@ enum grpcsttbackground_flags {
 	GRPCSTTBACKGROUND_FLAG_SSL_GRPC = (1 << 2),
 	GRPCSTTBACKGROUND_FLAG_GENDER_IDENTIFICATION_GRPC = (1 << 3),
 	GRPCSTTBACKGROUND_FLAG_OFF_GENDER_IDENTIFICATION_GRPC = (1 << 4),
+	GRPCSTTBACKGROUND_FLAG_SENTIMENT_ANALYSIS_GRPC = (1 << 5),
+	GRPCSTTBACKGROUND_FLAG_OFF_SENTIMENT_ANALYSIS_GRPC = (1 << 6),
 };
 
 AST_APP_OPTIONS(grpcsttbackground_opts, {
@@ -150,6 +155,8 @@ AST_APP_OPTIONS(grpcsttbackground_opts, {
 	AST_APP_OPTION('S', GRPCSTTBACKGROUND_FLAG_SSL_GRPC),
 	AST_APP_OPTION('G', GRPCSTTBACKGROUND_FLAG_GENDER_IDENTIFICATION_GRPC),
 	AST_APP_OPTION('g', GRPCSTTBACKGROUND_FLAG_OFF_GENDER_IDENTIFICATION_GRPC),
+	AST_APP_OPTION('N', GRPCSTTBACKGROUND_FLAG_SENTIMENT_ANALYSIS_GRPC),
+	AST_APP_OPTION('n', GRPCSTTBACKGROUND_FLAG_OFF_SENTIMENT_ANALYSIS_GRPC),
 });
 
 struct thread_conf {
@@ -175,6 +182,7 @@ struct thread_conf {
 	int interim_results_enable;
 	double interim_results_interval;
 	int enable_gender_identification;
+	int enable_sentiment_analysis;
 };
 
 static struct thread_conf dflt_thread_conf = {
@@ -200,6 +208,7 @@ static struct thread_conf dflt_thread_conf = {
 	.interim_results_enable = 0,
 	.interim_results_interval = 0.0,
 	.enable_gender_identification = 0,
+	.enable_sentiment_analysis = 0,
 };
 static ast_mutex_t dflt_thread_conf_mutex;
 
@@ -289,6 +298,7 @@ static struct thread_conf *make_thread_conf(const struct thread_conf *source)
 	conf->interim_results_enable = source->interim_results_enable;
 	conf->interim_results_interval = source->interim_results_interval;
 	conf->enable_gender_identification = source->enable_gender_identification;
+	conf->enable_sentiment_analysis = source->enable_sentiment_analysis;
 	return conf;
 }
 
@@ -301,7 +311,8 @@ static void *thread_start(struct thread_conf *conf)
 		     chan, conf->ssl_grpc, conf->ca_data, conf->language_code, conf->max_alternatives, conf->frame_format,
 		     conf->vad_disable, conf->vad_min_speech_duration, conf->vad_max_speech_duration,
 		     conf->vad_silence_duration_threshold, conf->vad_silence_prob_threshold, conf->vad_aggressiveness,
-		     conf->interim_results_enable, conf->interim_results_interval, conf->enable_gender_identification);
+		     conf->interim_results_enable, conf->interim_results_interval, conf->enable_gender_identification,
+		     conf->enable_sentiment_analysis);
 
 	close(conf->terminate_event_fd);
 	ast_channel_unref(chan);
@@ -340,6 +351,7 @@ static void clear_config(void)
 	dflt_thread_conf.interim_results_enable = 0;
 	dflt_thread_conf.interim_results_interval = 0.0;
 	dflt_thread_conf.enable_gender_identification = 0;
+	dflt_thread_conf.enable_sentiment_analysis = 0;
 }
 static int load_config(int reload)
 {
@@ -432,6 +444,14 @@ static int load_config(int reload)
 			while (var) {
 				if (!strcasecmp(var->name, "enable")) {
 					dflt_thread_conf.enable_gender_identification = ast_true(var->value);
+				}
+				var = var->next;
+			}
+		} else if (!strcasecmp(cat, "sentiment_analysis")) {
+			struct ast_variable *var = ast_variable_browse(cfg, cat);
+			while (var) {
+				if (!strcasecmp(var->name, "enable")) {
+					dflt_thread_conf.enable_sentiment_analysis = ast_true(var->value);
 				}
 				var = var->next;
 			}
@@ -582,6 +602,11 @@ static int grpcsttbackground_exec(struct ast_channel *chan, const char *data)
 			thread_conf.enable_gender_identification = 0;
 		if (ast_test_flag(&flags, GRPCSTTBACKGROUND_FLAG_GENDER_IDENTIFICATION_GRPC))
 			thread_conf.enable_gender_identification = 1;
+		
+		if (ast_test_flag(&flags, GRPCSTTBACKGROUND_FLAG_OFF_SENTIMENT_ANALYSIS_GRPC))
+			thread_conf.enable_sentiment_analysis = 0;
+		if (ast_test_flag(&flags, GRPCSTTBACKGROUND_FLAG_SENTIMENT_ANALYSIS_GRPC))
+			thread_conf.enable_sentiment_analysis = 1;
 	}
 
 	if (args.language_code && *args.language_code)

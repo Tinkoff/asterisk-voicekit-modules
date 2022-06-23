@@ -53,7 +53,8 @@ extern void grpc_stt_run(
 	double vad_aggressiveness,
 	int interim_results_enable,
 	double interim_results_interval,
-	int enable_gender_identification);
+	int enable_gender_identification,
+	int enable_sentiment_analysis);
 
 #ifdef __cplusplus
 };

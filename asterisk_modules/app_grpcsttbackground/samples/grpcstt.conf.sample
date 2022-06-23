@@ -53,6 +53,11 @@ interval=3
 ;Enable gender identification. Default: no
 enable=true
 
+[sentiment_analysis]
+
+;Enable sentiment_analysis. Default: no
+enable=true
+
 [authorization]
 
 ;Set API key for authorization. Default: ""
