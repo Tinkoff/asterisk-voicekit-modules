@@ -141,10 +141,12 @@ static std::string build_grpcstt_event(const tinkoff::cloud::stt::v1::StreamingR
 		json_object_set_new_nocheck(json_root, "gender_identification_result", build_json_gender_identification_result(male_proba, female_proba));
 	}
 
-	const tinkoff::cloud::stt::v1::SpeechSentimentAnalysisResult &sentiment_analysis_result = recognition_result.sentiment_analysis_result();
-	const float negative_prob_audio = sentiment_analysis_result.negative_prob_audio();
-	const float negative_prob_audio_text = sentiment_analysis_result.negative_prob_audio_text();
-	json_object_set_new_nocheck(json_root, "sentiment_analysis_result", build_json_sentiment_analysis_result(negative_prob_audio, negative_prob_audio_text));
+	if (recognition_result.has_sentiment_analysis_result()) {
+		const tinkoff::cloud::stt::v1::SpeechSentimentAnalysisResult &sentiment_analysis_result = recognition_result.sentiment_analysis_result();
+		const float negative_prob_audio = sentiment_analysis_result.negative_prob_audio();
+		const float negative_prob_audio_text = sentiment_analysis_result.negative_prob_audio_text();
+		json_object_set_new_nocheck(json_root, "sentiment_analysis_result", build_json_sentiment_analysis_result(negative_prob_audio, negative_prob_audio_text));
+	}
 
 	char *dump = json_dumps(json_root, (json_ensure_ascii ? (JSON_COMPACT | JSON_ENSURE_ASCII) : (JSON_COMPACT)));
 	std::string result(dump);
