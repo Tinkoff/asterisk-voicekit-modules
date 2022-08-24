@@ -39,7 +39,6 @@ extern void grpc_stt_run(
 	const char *authorization_issuer,
 	const char *authorization_subject,
 	const char *authorization_audience,
-	const char *x_request_id,
 	struct ast_channel *chan,
 	int ssl_grpc,
 	const char *ca_data,
