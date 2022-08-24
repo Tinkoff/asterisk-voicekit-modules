@@ -32,6 +32,7 @@ extern "C" struct ast_module *AST_MODULE_SELF_SYM(void);
 #include <string>
 #include <thread>
 #include <unistd.h>
+#include <ctime>
 
 #include <grpcpp/channel.h>
 #include <grpcpp/client_context.h>
@@ -89,6 +90,36 @@ static inline int aligned_samples(int samples)
 {
 	return (samples + ALIGNMENT_SAMPLES/2)/ALIGNMENT_SAMPLES*ALIGNMENT_SAMPLES;
 }
+static void log_send_time(bool * start_speaking, const std::string &x_request_id, std::size_t len)
+{
+    auto duration = std::chrono::system_clock::now();
+    long long seconds = std::chrono::duration_cast<std::chrono::seconds>(duration.time_since_epoch()).count();
+    long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration.time_since_epoch()).count();
+    long t = std::chrono::system_clock::to_time_t(duration);
+    char buff[100];
+    if (!std::strftime(buff, 100, "%F %T", std::localtime(&t))) {
+        ast_log(AST_LOG_WARNING, "error getting current time");
+    }
+    if (*start_speaking) {
+        ast_log(AST_LOG_DEBUG, "send FIRST chunks to STT at %s.%lld x-request-id:%s data_len:%lu\n", buff, millis - seconds * 1000, x_request_id.c_str(), len);
+        *start_speaking = false;
+    } else {
+        ast_log(AST_LOG_DEBUG, "send chunks to STT at %s.%lld x-request-id:%s data_len:%lu\n", buff, millis - seconds * 1000, x_request_id.c_str(), len);
+    }
+}
+static void log_receive_time(const std::string &x_request_id)
+{
+    auto duration = std::chrono::system_clock::now();
+    long long seconds = std::chrono::duration_cast<std::chrono::seconds>(duration.time_since_epoch()).count();
+    long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration.time_since_epoch()).count();
+    long t = std::chrono::system_clock::to_time_t(duration);
+    char buff[100];
+    if (!std::strftime(buff, 100, "%F %T", std::localtime(&t))) {
+        ast_log(AST_LOG_WARNING, "error getting current time");
+    }
+    ast_log(AST_LOG_DEBUG, "receive chunks from STT at %s.%lld x-request-id:%s\n", buff, millis - seconds * 1000, x_request_id.c_str());
+}
+
 static inline void eventfd_skip(int fd)
 {
 	eventfd_t value;
@@ -317,6 +348,7 @@ private:
 	std::string authorization_issuer;
 	std::string authorization_subject;
 	std::string authorization_audience;
+    std::string x_request_id;
 	struct ast_channel *chan;
 	std::string language_code;
 	int max_alternatives;
@@ -443,7 +475,6 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 	std::shared_ptr<grpc::ClientReaderWriter<tinkoff::cloud::stt::v1::StreamingRecognizeRequest,
 						 tinkoff::cloud::stt::v1::StreamingRecognizeResponse>> stream(stt_stub->StreamingRecognize(&context));
 
-
 	try {
 		std::thread writer(
 			[stream, this]()
@@ -494,7 +525,8 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 		stream->WaitForInitialMetadata();
 		const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
 		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
-		push_grpcstt_x_request_id_event(chan, (x_request_id_it != metadata.end()) ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "");
+        x_request_id = x_request_id_it != metadata.end() ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "";
+		push_grpcstt_x_request_id_event(chan, x_request_id);
 	} catch (const std::exception &ex) {
 		error_status = -1;
 		error_message = std::string("GRPC STT finished with error: ") + ex.what();
@@ -509,7 +541,9 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 		[stream, this]()
 		{
 			bool stream_valid = true;
+            bool start_speaking = true;
 			bool warned = false;
+
 			struct timespec last_frame_moment;
 			clock_gettime(CLOCK_MONOTONIC_RAW, &last_frame_moment);
 			while (stream_valid && !ast_check_hangup_locked(chan)) {
@@ -536,6 +570,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 					if (gap_samples > 0) {
 						tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
 						std::vector<uint8_t> buffer = make_silence_samples(frame_format, gap_samples);
+                        start_speaking = true;
 						request.set_audio_content(buffer.data(), buffer.size());
 						if (!stream->Write(request))
 							stream_valid = false;
@@ -562,6 +597,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 							if (gap_samples > 0) {
 								tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
 								std::vector<uint8_t> buffer = make_silence_samples(frame_format, gap_samples);
+                                start_speaking = true;
 								request.set_audio_content(buffer.data(), buffer.size());
 								if (!stream->Write(request))
 									stream_valid = false;
@@ -569,7 +605,6 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 							}
 							gap_handled = true;
 						}
-
 						tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
 						std::vector<uint8_t> buffer;
 						size_t len = 0;
@@ -577,7 +612,8 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 						if (data) {
 							time_add_samples(&last_frame_moment, f->samples);
 							request.set_audio_content(data, len);
-							if (!stream->Write(request))
+                            log_send_time(&start_speaking, x_request_id, len);
+                            if (!stream->Write(request))
 								stream_valid = false;
 						}
 					}
@@ -593,6 +629,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 	try {
 		tinkoff::cloud::stt::v1::StreamingRecognizeResponse response;
 		while (stream->Read(&response)) {
+            log_receive_time(x_request_id);
 			for (const tinkoff::cloud::stt::v1::StreamingRecognitionResult &stream_result: response.results()) {
 				push_grpcstt_event(chan, build_grpcstt_event(stream_result, false), false);
 				push_grpcstt_event(chan, build_grpcstt_event(stream_result, true), true);
