@@ -90,29 +90,28 @@ static inline int aligned_samples(int samples)
 {
 	return (samples + ALIGNMENT_SAMPLES/2)/ALIGNMENT_SAMPLES*ALIGNMENT_SAMPLES;
 }
-static void log_send_time(bool * start_speaking, const std::string &x_request_id, std::size_t len)
+static void log_send_time(bool start_speaking, const std::string &x_request_id, std::size_t len)
 {
-    auto duration = std::chrono::system_clock::now();
-    long long seconds = std::chrono::duration_cast<std::chrono::seconds>(duration.time_since_epoch()).count();
-    long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration.time_since_epoch()).count();
-    long t = std::chrono::system_clock::to_time_t(duration);
+    auto now = std::chrono::system_clock::now();
+    long long seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+    long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    long t = std::chrono::system_clock::to_time_t(now);
     char buff[100];
     if (!std::strftime(buff, 100, "%F %T", std::localtime(&t))) {
         ast_log(AST_LOG_WARNING, "error getting current time");
     }
-    if (*start_speaking) {
+    if (start_speaking) {
         ast_log(AST_LOG_DEBUG, "send FIRST chunks to STT at %s.%lld x-request-id:%s data_len:%lu\n", buff, millis - seconds * 1000, x_request_id.c_str(), len);
-        *start_speaking = false;
     } else {
         ast_log(AST_LOG_DEBUG, "send chunks to STT at %s.%lld x-request-id:%s data_len:%lu\n", buff, millis - seconds * 1000, x_request_id.c_str(), len);
     }
 }
 static void log_receive_time(const std::string &x_request_id)
 {
-    auto duration = std::chrono::system_clock::now();
-    long long seconds = std::chrono::duration_cast<std::chrono::seconds>(duration.time_since_epoch()).count();
-    long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(duration.time_since_epoch()).count();
-    long t = std::chrono::system_clock::to_time_t(duration);
+    auto now = std::chrono::system_clock::now();
+    long long seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+    long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    long t = std::chrono::system_clock::to_time_t(now);
     char buff[100];
     if (!std::strftime(buff, 100, "%F %T", std::localtime(&t))) {
         ast_log(AST_LOG_WARNING, "error getting current time");
@@ -348,7 +347,7 @@ private:
 	std::string authorization_issuer;
 	std::string authorization_subject;
 	std::string authorization_audience;
-    std::string x_request_id;
+	std::string x_request_id;
 	struct ast_channel *chan;
 	std::string language_code;
 	int max_alternatives;
@@ -612,7 +611,8 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 						if (data) {
 							time_add_samples(&last_frame_moment, f->samples);
 							request.set_audio_content(data, len);
-                            log_send_time(&start_speaking, x_request_id, len);
+                            log_send_time(start_speaking, x_request_id, len);
+                            start_speaking = false;
                             if (!stream->Write(request))
 								stream_valid = false;
 						}
