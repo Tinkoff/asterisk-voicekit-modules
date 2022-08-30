@@ -524,7 +524,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 		stream->WaitForInitialMetadata();
 		const std::multimap<grpc::string_ref, grpc::string_ref> &metadata = context.GetServerInitialMetadata();
 		std::multimap<grpc::string_ref, grpc::string_ref>::const_iterator x_request_id_it = metadata.find("x-request-id");
-        x_request_id = x_request_id_it != metadata.end() ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "";
+		x_request_id = x_request_id_it != metadata.end() ? std::string(x_request_id_it->second.data(), x_request_id_it->second.size()) : "";
 		push_grpcstt_x_request_id_event(chan, x_request_id);
 	} catch (const std::exception &ex) {
 		error_status = -1;
@@ -540,9 +540,8 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 		[stream, this]()
 		{
 			bool stream_valid = true;
-            bool start_speaking = true;
+			bool start_speaking = true;
 			bool warned = false;
-
 			struct timespec last_frame_moment;
 			clock_gettime(CLOCK_MONOTONIC_RAW, &last_frame_moment);
 			while (stream_valid && !ast_check_hangup_locked(chan)) {
@@ -569,7 +568,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 					if (gap_samples > 0) {
 						tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
 						std::vector<uint8_t> buffer = make_silence_samples(frame_format, gap_samples);
-                        start_speaking = true;
+						start_speaking = true;
 						request.set_audio_content(buffer.data(), buffer.size());
 						if (!stream->Write(request))
 							stream_valid = false;
@@ -596,7 +595,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 							if (gap_samples > 0) {
 								tinkoff::cloud::stt::v1::StreamingRecognizeRequest request;
 								std::vector<uint8_t> buffer = make_silence_samples(frame_format, gap_samples);
-                                start_speaking = true;
+								start_speaking = true;
 								request.set_audio_content(buffer.data(), buffer.size());
 								if (!stream->Write(request))
 									stream_valid = false;
@@ -611,9 +610,9 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 						if (data) {
 							time_add_samples(&last_frame_moment, f->samples);
 							request.set_audio_content(data, len);
-                            log_send_time(start_speaking, x_request_id, len);
-                            start_speaking = false;
-                            if (!stream->Write(request))
+							log_send_time(start_speaking, x_request_id, len);
+							start_speaking = false;
+							if (!stream->Write(request))
 								stream_valid = false;
 						}
 					}
@@ -629,7 +628,7 @@ bool GRPCSTT::Run(int &error_status, std::string &error_message)
 	try {
 		tinkoff::cloud::stt::v1::StreamingRecognizeResponse response;
 		while (stream->Read(&response)) {
-            log_receive_time(x_request_id);
+			log_receive_time(x_request_id);
 			for (const tinkoff::cloud::stt::v1::StreamingRecognitionResult &stream_result: response.results()) {
 				push_grpcstt_event(chan, build_grpcstt_event(stream_result, false), false);
 				push_grpcstt_event(chan, build_grpcstt_event(stream_result, true), true);
