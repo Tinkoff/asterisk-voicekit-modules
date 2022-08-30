@@ -92,31 +92,31 @@ static inline int aligned_samples(int samples)
 }
 static void log_send_time(bool start_speaking, const std::string &x_request_id, std::size_t len)
 {
-    auto now = std::chrono::system_clock::now();
-    long long seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-    long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    long t = std::chrono::system_clock::to_time_t(now);
-    char buff[100];
-    if (!std::strftime(buff, 100, "%F %T", std::localtime(&t))) {
-        ast_log(AST_LOG_WARNING, "error getting current time");
-    }
-    if (start_speaking) {
-        ast_log(AST_LOG_DEBUG, "send FIRST chunks to STT at %s.%lld x-request-id:%s data_len:%lu\n", buff, millis - seconds * 1000, x_request_id.c_str(), len);
-    } else {
-        ast_log(AST_LOG_DEBUG, "send chunks to STT at %s.%lld x-request-id:%s data_len:%lu\n", buff, millis - seconds * 1000, x_request_id.c_str(), len);
-    }
+	auto now = std::chrono::system_clock::now();
+	long long seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+	long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+	long t = std::chrono::system_clock::to_time_t(now);
+	char buff[100];
+	if (!std::strftime(buff, 100, "%F %T", std::localtime(&t))) {
+		ast_log(AST_LOG_WARNING, "error getting current time");
+	}
+	if (start_speaking) {
+		ast_log(AST_LOG_DEBUG, "send FIRST chunks to STT at %s.%lld x-request-id:%s data_len:%lu\n", buff, millis - seconds * 1000, x_request_id.c_str(), len);
+	} else {
+		ast_log(AST_LOG_DEBUG, "send chunks to STT at %s.%lld x-request-id:%s data_len:%lu\n", buff, millis - seconds * 1000, x_request_id.c_str(), len);
+	}
 }
 static void log_receive_time(const std::string &x_request_id)
 {
-    auto now = std::chrono::system_clock::now();
-    long long seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
-    long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
-    long t = std::chrono::system_clock::to_time_t(now);
-    char buff[100];
-    if (!std::strftime(buff, 100, "%F %T", std::localtime(&t))) {
-        ast_log(AST_LOG_WARNING, "error getting current time");
-    }
-    ast_log(AST_LOG_DEBUG, "receive chunks from STT at %s.%lld x-request-id:%s\n", buff, millis - seconds * 1000, x_request_id.c_str());
+	auto now = std::chrono::system_clock::now();
+	long long seconds = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch()).count();
+	long long millis = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+	long t = std::chrono::system_clock::to_time_t(now);
+	char buff[100];
+	if (!std::strftime(buff, 100, "%F %T", std::localtime(&t))) {
+		ast_log(AST_LOG_WARNING, "error getting current time");
+	}
+	ast_log(AST_LOG_DEBUG, "receive chunks from STT at %s.%lld x-request-id:%s\n", buff, millis - seconds * 1000, x_request_id.c_str());
 }
 
 static inline void eventfd_skip(int fd)
